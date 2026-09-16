@@ -1,0 +1,50 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Sanal ortam (repoya girmez) ---
+.venv/
+venv/
+env/
+
+# --- Üretilen çıktılar / önbellek (büyük, yeniden üretilebilir) ---
+*.hdf5
+simulation_data.hdf5
+*.npz
+cache/
+__rcwa_cache__/
+
+# --- Büyük simülasyon çıktıları / maskeler ---
+*.gds
+*.gdsii
+*.png
+*.jpg
+*.jpeg
+*.pdf
+Simulasyonlar/
+outputs/
+figures/
+
+# --- Gizli / yerel yapılandırma (ASLA commit edilmez) ---
+.tidy3d/
+*config*.json
+*.key
+*.pem
+.env
+.env.*
+secrets*
+
+# --- Editör / işletim sistemi ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

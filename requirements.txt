@@ -1,0 +1,20 @@
+# RCWA Metalens — çekirdek + özellik bağımlılıkları
+# Kur:  pip install -r requirements.txt
+# (Windows .venv içinden çalıştır.)
+
+# --- ZORUNLU (tüm çekirdek + E1/E3/E4/E7 özellikleri) ---
+numpy
+scipy
+matplotlib
+grcwa            # doğrulama + adjoint(E1) + metal-2B(E3) + non-ortogonal kafes(E4)
+autograd         # adjoint/autodiff gradyanları (E1)
+gdstk            # GDS üretimi
+pyyaml           # refractiveindex.info YAML malzeme içe aktarma (E7)
+
+# --- OPSİYONEL (gerektiğinde) ---
+# tidy3d         # 3B FDTD bulut doğrulama (E5/E6) — akademik ücretsiz kredi
+                 # kur:  pip install tidy3d   sonra:  tidy3d configure
+# jax[cuda12]    # E2 GPU + autodiff (yalnız NVIDIA GPU)  ->  pip install "jax[cuda12]"
+# cupy-cuda12x   # E2 GPU dizilim (numpy-uyumlu, NVIDIA GPU)
+# meep           # yerel/çevrimdışı 3B FDTD (conda):
+                 #   conda create -n mp -c conda-forge pymeep pymeep-extras
