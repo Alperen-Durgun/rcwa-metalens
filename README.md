@@ -9,6 +9,7 @@ Sıfırdan yazılmış, **test edilmiş** bir RCWA çözücü ve metalens tasar�
 1B/2B çözücüler, meta-atom faz kütüphaneleri, üretilebilir **GDS-II** maske çıktısı,
 profesyonel optik metrikler ve **FDTD ile çapraz-doğrulama** (Meep + Tidy3D) içerir.
 
+[![CI](https://github.com/Alperen-Durgun/rcwa-metalens/actions/workflows/ci.yml/badge.svg)](https://github.com/Alperen-Durgun/rcwa-metalens/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 

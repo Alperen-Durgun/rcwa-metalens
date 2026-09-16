@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rcwa-metalens"
+version = "0.1.0"
+description = "From-scratch, FDTD-validated RCWA solver and metalens design pipeline (1D/2D, GDS export, optical metrics, Meep/Tidy3D bridges)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Alperen Durgun" }]
+keywords = [
+    "rcwa", "metalens", "metasurface", "nanophotonics", "optics",
+    "diffraction", "fdtd", "photonics", "gds",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "grcwa",
+    "autograd",
+    "gdstk",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+fdtd = ["tidy3d"]        # bulut FDTD doğrulama (meep conda ile ayrı kurulur)
+gpu = ["jax", "cupy"]    # E2 GPU arka uçları (NVIDIA)
+
+[project.urls]
+Homepage = "https://github.com/Alperen-Durgun/rcwa-metalens"
+Repository = "https://github.com/Alperen-Durgun/rcwa-metalens"
+
+[tool.setuptools]
+packages = ["rcwa"]
+
+[tool.setuptools.package-data]
+rcwa = ["materials_data/*.csv"]
