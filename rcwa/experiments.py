@@ -653,6 +653,14 @@ def run_metalens_design_full(fm, slug):
     st_mtf = metrics.strehl_mtf(metrics.mtf_2d(I), metrics.mtf_2d(Iideal))
     # GDS + design JSON
     gdspath = _out(slug + ".gds"); npoly = gds.layout_to_gds(placements, gdspath)
+    from . import exporting
+    min_feat = num(fm, "min_feature", 0.05); min_gap = num(fm, "min_gap", 0.04)
+    drc = exporting.drc_check(placements, min_feature=min_feat, min_gap=min_gap)
+    mnote = ""
+    if mat:
+        mi = materials.info(mat)
+        mnote = (f"- **Material data:** {mi['note']}"
+                 + (" — ⚠️ approximate: use measured n,k (`materials.register_yaml`) before fabrication" if mi["approximate"] else "") + "\n")
     import json
     design = {"lam0": lam0, "Lcell": L, "height": H, "n_pillar": n_pillar, "shape": shape,
               "D_lens": D_lens, "f": f, "material": mat, "n_sub": n_sub,
@@ -687,7 +695,9 @@ def run_metalens_design_full(fm, slug):
             f"| Encircled energy 80% | {ee80*1000:.0f} nm | spot concentration |\n"
             f"| Sidelobe level | {a['sidelobe_dB']:.1f} dB | lower = cleaner spot |\n"
             f"| Depth of focus (DOF) | {dof:.1f} um | on-axis I(z) FWHM |\n\n"
-            f"- **GDS (fabrication-ready):** `{os.path.basename(gdspath)}` — {npoly} polygons\n"
+            f"- **GDS:** `{os.path.basename(gdspath)}` — {npoly} pillars, {os.path.getsize(gdspath)/1e6:.2f} MB (hierarchical)\n"
+            f"- **DRC** (feature ≥ {min_feat*1000:.0f}nm, gap ≥ {min_gap*1000:.0f}nm): {'✅ clean' if drc['ok'] else '❌ ' + str(drc['n_feature_viol']) + ' feature / ' + str(drc['n_gap_viol']) + ' gap violations'} · smallest pillar {drc['min_size']*1000:.0f}nm, smallest gap {drc['worst_gap']*1000:.0f}nm\n"
+            + mnote +
             f"- **For 3D verification:** `{slug}_design.json` → fullwave (Meep/Tidy3D)\n"
             f"- Locally-periodic approximation; final verification is FDTD. (Metric definitions: see `rcwa/metrics.py`.)")
     return figpath, body, f"z={zf:.1f}um FWHM={fwhm*1000:.0f}nm eff(abs){abs_pct:.0f}% Strehl{St:.2f} DOF{dof:.1f}um GDS✓"
@@ -942,7 +952,7 @@ def run_metalens_large_tiled(fm, slug):
     gb_now = LL.scale_projection(st["n_atoms"])
     na_cm = int(np.pi / 4 * (10000.0 / L) ** 2); gb_cm = LL.scale_projection(na_cm)
     body = (f"- **Aperture:** D={st['D_lens']:.0f}um, f={f}um, NA={st['NA']:.2f} · **{st['n_atoms']:,} meta-atoms** (vectorized/loop-free selection)\n"
-            f"- **Tiled GDS:** {st['n_tiles']} tiles, {st['npoly']:,} polygons, ~{gb_now:.2f} GB → `{os.path.basename(gdsdir) if gdsdir else '(not written)'}`\n"
+            f"- **Tiled GDS:** {st['n_tiles']} tiles, {st['npoly']:,} pillars, ~{gb_now:.3f} GB (hierarchical) → `{os.path.basename(gdsdir) if gdsdir else '(not written)'}`\n"
             f"- **Time:** {dt:.1f}s · memory bounded by the tile size (cm-scale feasible)\n"
             f"- **Scale projection:** 1cm aperture ≈ {na_cm:,} atoms, ~{gb_cm:.0f} GB GDS — the pipeline works; only disk/time remain.\n"
             f"- Verification: the LUT selection is the same library and LUT rule as `metalens_design_full` (global phase offset fixed at 0); for 3D use a representative section or the Tidy3D cloud.")

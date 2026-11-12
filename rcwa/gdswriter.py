@@ -49,55 +49,87 @@ def _timestamp():
     return struct.pack(">12h", *vals)
 
 
+def _atom_key(p):
+    par = tuple(np.round(np.atleast_1d(p["params"]).astype(float), 6))
+    return (p.get("shape", "circle"), par, round(float(p.get("angle", 0.0)), 9))
+
+
 def write_gds(placements, filepath, cell_name="METALENS", layer=1, datatype=0,
-              unit=1e-6, precision=1e-9, n_circle=48):
-    """placements: [{x,y,shape,params,angle}] (um). Writes pure-Python GDSII.
+              unit=1e-6, precision=1e-9, n_circle=48, hierarchical=True):
+    """placements: [{x,y,shape,params,angle}] (um). Writes a GDSII file in pure Python.
     unit=1e-6 (um user unit), precision=1e-9 (nm database unit).
-    Returns: number of polygons (BOUNDARY) written."""
+
+    hierarchical=True (default): every DISTINCT meta-atom (shape, size, rotation) is written
+    once as its own cell and the lens is a list of cell references (SREF). A metalens uses
+    only a few dozen distinct atoms, so the file shrinks from ~415 to ~30 bytes per pillar
+    (>10x) and loads much faster in layout tools. hierarchical=False writes one flat
+    polygon per pillar (some simple viewers/converters prefer that).
+    Returns: number of pillars written (= polygons after flattening)."""
     dbscale = unit / precision                     # 1um -> 1000 db units (nm)
     ts = _timestamp()
-    out = bytearray()
-    out += _rec(0x00, 0x02, struct.pack(">h", 600))                 # HEADER v600
-    out += _rec(0x01, 0x02, ts)                                     # BGNLIB
-    out += _rec(0x02, 0x06, _ascii("LIB"))                          # LIBNAME
-    out += _rec(0x03, 0x05, _real8(precision / unit) + _real8(precision))  # UNITS
-    out += _rec(0x05, 0x02, ts)                                     # BGNSTR
-    out += _rec(0x06, 0x06, _ascii(cell_name))                     # STRNAME
-    # constant records (same for every polygon) — prepare in advance
     r_bnd = _rec(0x08, 0x00); r_lay = _rec(0x0D, 0x02, struct.pack(">h", layer))
     r_dt = _rec(0x0E, 0x02, struct.pack(">h", datatype)); r_end = _rec(0x11, 0x00)
-    # process circular pillars (angle=0) VECTORIZED (speed): critical for large lenses
-    circ = [p for p in placements if p.get("shape", "circle") == "circle" and float(p.get("angle", 0.0)) == 0.0]
-    other = [p for p in placements if not (p.get("shape", "circle") == "circle" and float(p.get("angle", 0.0)) == 0.0)]
-    n = 0
-    if circ:
-        ang = np.linspace(0, 2 * np.pi, n_circle, endpoint=False)
-        uc = np.stack([np.cos(ang), np.sin(ang)], axis=1)           # (n_circle,2)
-        cx = np.array([p["x"] for p in circ]); cy = np.array([p["y"] for p in circ])
-        rad = np.array([float(np.atleast_1d(p["params"])[0]) for p in circ]) / 2.0
-        # (M, n_circle+1, 2): center + radius*unit-circle, closed
-        vx = cx[:, None] + rad[:, None] * uc[None, :, 0]
-        vy = cy[:, None] + rad[:, None] * uc[None, :, 1]
-        vx = np.concatenate([vx, vx[:, :1]], axis=1); vy = np.concatenate([vy, vy[:, :1]], axis=1)
-        ix = np.round(vx * dbscale).astype(">i4"); iy = np.round(vy * dbscale).astype(">i4")
-        M, P = ix.shape
-        inter = np.empty((M, P, 2), ">i4"); inter[:, :, 0] = ix; inter[:, :, 1] = iy
-        xy_bytes = inter.reshape(M, P * 2).tobytes()                # XY of all polygons
-        xy_hdr = struct.pack(">HBB", 4 + P * 2 * 4, 0x10, 0x03)     # XY header (fixed length)
-        stride = P * 2 * 4
-        chunks = []
-        for k in range(M):
-            chunks.append(r_bnd); chunks.append(r_lay); chunks.append(r_dt)
-            chunks.append(xy_hdr); chunks.append(xy_bytes[k * stride:(k + 1) * stride]); chunks.append(r_end)
-        out += b"".join(chunks); n += M
-    for pl in other:                                                # non-circular / rotated
-        verts = np.asarray(polygon(pl["shape"], pl["params"], center=(pl["x"], pl["y"]),
-                                   angle=pl.get("angle", 0.0), n_circle=n_circle), float)
+
+    def boundary(verts):
         xy = np.vstack([verts, verts[:1]])
-        out += r_bnd + r_lay + r_dt + _rec(0x10, 0x03, np.round(xy * dbscale).astype(">i4").tobytes()) + r_end
-        n += 1
-    out += _rec(0x07, 0x00)                                         # ENDSTR
-    out += _rec(0x04, 0x00)                                         # ENDLIB
-    with open(filepath, "wb") as f:                                # Python open -> Unicode safe
-        f.write(out)
+        return r_bnd + r_lay + r_dt + _rec(0x10, 0x03, np.round(xy * dbscale).astype(">i4").tobytes()) + r_end
+
+    n = len(placements)
+    with open(filepath, "wb") as f:                # Python open -> Unicode-path safe
+        f.write(_rec(0x00, 0x02, struct.pack(">h", 600)))                        # HEADER v600
+        f.write(_rec(0x01, 0x02, ts))                                            # BGNLIB
+        f.write(_rec(0x02, 0x06, _ascii("LIB")))                                 # LIBNAME
+        f.write(_rec(0x03, 0x05, _real8(precision / unit) + _real8(precision)))  # UNITS
+        if hierarchical and n:
+            keys = {}; idx = np.empty(n, np.int64)
+            for i, p in enumerate(placements):
+                idx[i] = keys.setdefault(_atom_key(p), len(keys))
+            prefix = cell_name[:20]
+            names = [_ascii(f"{prefix}_{k:06d}") for k in range(len(keys))]      # fixed length
+            for (shape, par, ang), k in keys.items():                            # one cell per atom
+                verts = np.asarray(polygon(shape, par if len(par) > 1 else par[0], center=(0.0, 0.0),
+                                           angle=ang, n_circle=n_circle), float)
+                f.write(_rec(0x05, 0x02, ts) + _rec(0x06, 0x06, names[k]) + boundary(verts) + _rec(0x07, 0x00))
+            f.write(_rec(0x05, 0x02, ts) + _rec(0x06, 0x06, _ascii(cell_name)))  # top cell
+            ln = len(names[0]); rec_len = 4 + (4 + ln) + 12 + 4
+            tmpl = _rec(0x0A, 0x00) + _rec(0x12, 0x06, names[0]) + _rec(0x10, 0x03, b"\x00" * 8) + r_end
+            table = np.frombuffer(b"".join(names), np.uint8).reshape(len(names), ln)
+            xy = np.array([[p["x"], p["y"]] for p in placements], float)
+            step = 200000                                                        # bounded memory
+            for s in range(0, n, step):
+                e = min(n, s + step)
+                arr = np.tile(np.frombuffer(tmpl, np.uint8), (e - s, 1))
+                arr[:, 8:8 + ln] = table[idx[s:e]]
+                arr[:, 12 + ln:20 + ln] = np.round(xy[s:e] * dbscale).astype(">i4").view(np.uint8).reshape(e - s, 8)
+                f.write(arr.tobytes())
+            f.write(_rec(0x07, 0x00))                                            # ENDSTR
+        else:
+            f.write(_rec(0x05, 0x02, ts) + _rec(0x06, 0x06, _ascii(cell_name)))
+            # circular pillars (angle=0) are processed VECTORIZED (speed)
+            is_c = [p.get("shape", "circle") == "circle" and float(p.get("angle", 0.0)) == 0.0 for p in placements]
+            circ = [p for p, c in zip(placements, is_c) if c]
+            if circ:
+                ang = np.linspace(0, 2 * np.pi, n_circle, endpoint=False)
+                cx = np.array([p["x"] for p in circ]); cy = np.array([p["y"] for p in circ])
+                rad = np.array([float(np.atleast_1d(p["params"])[0]) for p in circ]) / 2.0
+                vx = cx[:, None] + rad[:, None] * np.cos(ang)[None, :]
+                vy = cy[:, None] + rad[:, None] * np.sin(ang)[None, :]
+                vx = np.concatenate([vx, vx[:, :1]], axis=1); vy = np.concatenate([vy, vy[:, :1]], axis=1)
+                Mc, Pn = vx.shape
+                inter = np.empty((Mc, Pn, 2), ">i4")
+                inter[:, :, 0] = np.round(vx * dbscale); inter[:, :, 1] = np.round(vy * dbscale)
+                head = r_bnd + r_lay + r_dt + struct.pack(">HBB", 4 + Pn * 8, 0x10, 0x03)
+                rec = np.empty((Mc, len(head) + Pn * 8 + len(r_end)), np.uint8)
+                rec[:, :len(head)] = np.frombuffer(head, np.uint8)
+                rec[:, len(head):len(head) + Pn * 8] = inter.view(np.uint8).reshape(Mc, Pn * 8)
+                rec[:, len(head) + Pn * 8:] = np.frombuffer(r_end, np.uint8)
+                f.write(rec.tobytes())
+            for pl, c in zip(placements, is_c):                                  # non-circular / rotated
+                if not c:
+                    f.write(boundary(np.asarray(polygon(pl["shape"], pl["params"], center=(pl["x"], pl["y"]),
+                                                        angle=pl.get("angle", 0.0), n_circle=n_circle), float)))
+            f.write(_rec(0x07, 0x00))                                            # ENDSTR
+        f.write(_rec(0x04, 0x00))                                                # ENDLIB
     return n
+
+

@@ -42,30 +42,35 @@ def far_field(E0, dx, lam):
     return I / I.max(), theta, theta
 
 
-def drc_check(placements, min_feature=0.05, min_gap=0.04, shape_key="params"):
-    """Simple design-rule check (DRC):
+def drc_check(placements, min_feature=0.05, min_gap=0.04, shape_key="params", max_report=50):
+    """Simple design-rule check (DRC) — scales to millions of pillars (k-d tree):
       - min feature: every pillar size >= min_feature (um)
-      - min gap: edge-to-edge spacing between neighboring pillars >= min_gap (um)
-    Returns: {ok, n_feature_viol, n_gap_viol, worst_gap, violations[list]}."""
-    xs = np.array([p["x"] for p in placements]); ys = np.array([p["y"] for p in placements])
+      - min gap: smallest edge-to-edge spacing to the 8 nearest neighbours >= min_gap (um)
+    The gap uses the first size parameter as the pillar extent (exact for circles and for
+    axis-aligned squares on a square lattice; conservative for other shapes).
+    Returns: {ok, n, n_feature_viol, n_gap_viol, worst_gap, min_size, violations[list]}."""
+    from scipy.spatial import cKDTree
+    n = len(placements)
+    if n == 0:
+        return {"ok": True, "n": 0, "n_feature_viol": 0, "n_gap_viol": 0, "worst_gap": -1.0,
+                "min_size": 0.0, "violations": []}
+    xy = np.array([[p["x"], p["y"]] for p in placements], float)
     sizes = np.array([float(np.atleast_1d(p[shape_key])[0]) for p in placements])
     viol = []
-    # feature size
     fv = np.where(sizes < min_feature)[0]
-    for i in fv:
+    for i in fv[:max_report]:
         viol.append({"type": "min_feature", "i": int(i), "value": float(sizes[i])})
-    # gap: nearest neighbor (edge-to-edge). O(n^2) for small layouts; a KDTree is recommended for large ones.
-    n = len(placements); worst = np.inf; gv = 0
-    if n <= 4000:
-        for i in range(n):
-            d = np.hypot(xs - xs[i], ys - ys[i]); d[i] = np.inf
-            j = int(np.argmin(d))
-            gap = d[j] - (sizes[i] + sizes[j]) / 2.0
-            worst = min(worst, gap)
-            if gap < min_gap:
-                gv += 1
-                if len(viol) < 50:
-                    viol.append({"type": "min_gap", "i": int(i), "j": j, "gap": round(float(gap), 4)})
-    return {"ok": len(fv) == 0 and gv == 0, "n_feature_viol": int(len(fv)),
-            "n_gap_viol": int(gv), "worst_gap": float(worst if np.isfinite(worst) else -1),
-            "violations": viol}
+    worst = np.inf; gv = np.zeros(0, int)
+    if n > 1:
+        kq = min(n, 9)                                    # self + the 8 lattice neighbours
+        dist, j = cKDTree(xy).query(xy, k=kq)
+        gaps = dist[:, 1:] - (sizes[:, None] + sizes[j[:, 1:]]) / 2.0
+        a = np.argmin(gaps, axis=1); gap = gaps[np.arange(n), a]; jn = j[np.arange(n), a + 1]
+        worst = float(gap.min()); gv = np.where(gap < min_gap)[0]
+        for i in gv[:max(0, max_report - len(viol))]:
+            viol.append({"type": "min_gap", "i": int(i), "j": int(jn[i]), "gap": round(float(gap[i]), 4)})
+    return {"ok": len(fv) == 0 and len(gv) == 0, "n": n, "n_feature_viol": int(len(fv)),
+            "n_gap_viol": int(len(gv)), "worst_gap": float(worst if np.isfinite(worst) else -1),
+            "min_size": float(sizes.min()), "violations": viol}
+
+

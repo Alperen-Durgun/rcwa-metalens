@@ -84,7 +84,7 @@ def design_large_lens(lam0, L, H, mat, shape, D_lens, f, M, gds_dir=None,
             "preview_size_nm": size_ds * 1000, "ci_ds": ci_ds}
 
 
-def scale_projection(n_atoms, npoly_bytes=415):
-    """GDS file-size projection. ~415 bytes/polygon (circular pillar, ~48 vertices;
-    measured: D=150µm → 144k atoms / 60MB). Lower for square shapes."""
-    return n_atoms * npoly_bytes / 1e9   # GB
+def scale_projection(n_atoms, bytes_per_atom=36):
+    """GDS file-size projection in GB. Hierarchical files (default writer) need ~36 bytes per
+    pillar (one cell reference); a flat file needs ~415 bytes per 48-vertex circle."""
+    return n_atoms * bytes_per_atom / 1e9

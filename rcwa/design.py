@@ -242,7 +242,8 @@ def analyze_focus(design, u=4, pad=1.6, nz=81):
     zf, zc, Iz = ff.find_focus(f, nz=nz)
     I = ff.intensity(zf); x = ff.x
     met = metrics.focal_metrics(I, x); fwhm = met["fwhm_x"]
-    es = metrics.efficiency_suite(I, x, fwhm, P_incident=ff.P_incident)
+    # incident power in the substrate vs transmitted power behind the lens: P ~ n * |E|^2
+    es = metrics.efficiency_suite(I, x, fwhm, P_incident=ff.P_incident * design["n_sub"] / n_bg)
     dl = lam0 / (2 * design["NA"])
     return {"z_focus": zf, "fwhm": fwhm, "diffraction_fwhm": dl, "peak_ij": met["peak_ij"],
             "strehl": strehl_at_focus(design["E0"], L, lam0, zf, ff=ff, n_bg=n_bg, u=u, pad=pad),

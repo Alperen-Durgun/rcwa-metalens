@@ -188,8 +188,8 @@ def test_gdswriter_geometry():
     from rcwa.shapes import polygon
     pl = [{"x": i * 0.35, "y": j * 0.35, "shape": "circle", "params": 0.2, "angle": 0} for i in range(3) for j in range(3)]
     p = os.path.join(tempfile.gettempdir(), "pure_ut.gds")
-    n = gds.layout_to_gds(pl, p)                          # pure-Python writer
-    polys = gdstk.read_gds(p).cells[0].polygons           # gdstk reads it back
+    n = gds.layout_to_gds(pl, p)                          # pure-Python writer (hierarchical)
+    polys = gdstk.read_gds(p).top_level()[0].get_polygons()   # gdstk reads it back, references flattened
     a_pure = sum(abs(x.area()) for x in polys)
     # reference: gdstk WRITE+READ (same nm rounding) — fair comparison
     pr = os.path.join(tempfile.gettempdir(), "ref_ut.gds")
@@ -575,6 +575,66 @@ def test_rayleigh_anomaly_is_finite():
     r2 = solve_rcwa_2d(0.55, 0, 0, 1, 1, 1.1, 1.1, [(e2, 0.3)], 3, 3)
     for r in (r1, r2, r3):
         assert np.isfinite(r["Rtot"]) and abs(r["Rtot"] + r["Ttot"] - 1) < 1e-3
+
+
+def test_gds_hierarchical_equals_flat():
+    """Hierarchical (cell-reference) and flat GDS describe the same geometry; the hierarchical
+    file is several times smaller. Mixed shapes and rotations included."""
+    import gdstk, tempfile, os
+    from rcwa import gds
+    rng = np.random.default_rng(1); sizes = [0.10, 0.15, 0.20]
+    pl = [{"x": i * 0.35, "y": j * 0.35, "shape": "circle", "params": sizes[(i + j) % 3], "angle": 0.0}
+          for i in range(20) for j in range(20)]
+    pl += [{"x": -1.0, "y": -1.0, "shape": "rect", "params": (0.3, 0.1), "angle": 0.5},
+           {"x": -2.0, "y": -1.0, "shape": "rect", "params": (0.3, 0.1), "angle": 0.5},
+           {"x": -3.0, "y": -1.0, "shape": "cross", "params": (0.3, 0.1), "angle": 0.0}]
+    tmp = tempfile.gettempdir(); ph = os.path.join(tmp, "h_ut.gds"); pf = os.path.join(tmp, "f_ut.gds")
+    assert gds.layout_to_gds(pl, ph) == len(pl) and gds.layout_to_gds(pl, pf, hierarchical=False) == len(pl)
+    sh, sf = gds.read_gds_summary(ph), gds.read_gds_summary(pf)
+    assert sh["polygons"] == sf["polygons"] == len(pl)
+    assert sh["references"] == len(pl) and sh["cells"] == 3 + 2 + 1 and sf["references"] == 0
+    def geom(path):
+        polys = gdstk.read_gds(path).top_level()[0].get_polygons()
+        c = np.array([q.points.mean(axis=0) for q in polys]); a = np.array([abs(q.area()) for q in polys])
+        o = np.lexsort((np.round(c[:, 1], 3), np.round(c[:, 0], 3)))
+        return c[o], a[o]
+    (ch_, ah), (cf, af) = geom(ph), geom(pf)
+    assert np.abs(ch_ - cf).max() < 2e-3 and np.abs(ah - af).max() < 1e-4
+    assert os.path.getsize(ph) * 5 < os.path.getsize(pf)
+    os.remove(ph); os.remove(pf)
+
+
+def test_drc_scales_and_detects():
+    """k-d tree DRC: clean lattice passes; an oversized pillar and a tiny one are both found."""
+    from rcwa import exporting as X
+    pl = [{"x": i * 0.35, "y": j * 0.35, "params": 0.2, "angle": 0} for i in range(120) for j in range(120)]
+    d = X.drc_check(pl, min_feature=0.05, min_gap=0.04)
+    assert d["ok"] and d["n"] == 14400 and abs(d["worst_gap"] - 0.15) < 1e-9
+    pl[777]["params"] = 0.48; pl[5000]["params"] = 0.03
+    d = X.drc_check(pl, min_feature=0.05, min_gap=0.04)
+    assert not d["ok"] and d["n_feature_viol"] == 1 and d["n_gap_viol"] == 5      # the pillar + its 4 neighbours
+
+
+def test_materials_provenance_and_range():
+    """Built-in tables are flagged approximate, refuse to extrapolate, and typos are explained."""
+    from rcwa import materials as Mt
+    i = Mt.info("TiO2_t")
+    assert i["approximate"] and i["kind"] == "table" and i["range_um"] == (0.45, 0.70)
+    assert not Mt.info("SiO2")["approximate"]
+    for bad in (lambda: Mt.eps_of("TiO2_t", 1.55), lambda: Mt.eps_of("TiO2t", 0.55)):
+        try:
+            bad(); raise AssertionError("must raise")
+        except ValueError as e:
+            assert "TiO2" in str(e)
+
+
+def test_substrate_energy_bookkeeping():
+    """n_sub: with a glass substrate the library still covers 2pi and the absolute efficiency
+    accounts for the index of the incidence medium (never exceeds 1)."""
+    from rcwa import design as dz
+    d = dz.design_lens(0.633, 0.35, 0.60, 6.0, 8.0, material="TiO2_t", n_sub=1.46, sizes=dz.default_sizes(0.35, 12))
+    a = dz.analyze_focus(d)
+    assert d["lib"]["coverage"] > 0.9 and 0.4 < a["eff_absolute"] < 1.0 and a["strehl"] <= 1.005
 
 
 if __name__ == "__main__":

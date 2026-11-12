@@ -1,8 +1,16 @@
 """Dispersive material library — A3.
 
-Wavelength-dependent refractive index n(λ) and absorption k (loss). eps = (n + ik)^2.
-λ is in microns (um). Simple Sellmeier/tables; extend as needed.
-Source values are approximate literature; replace with measured tables for precise work.
+Wavelength-dependent refractive index n(λ) and absorption k (loss). eps = (n + ik)^2,
+Im(eps) > 0 = absorption. λ is in microns (um).
+
+DATA QUALITY — read before fabricating anything:
+the built-in models and tables are APPROXIMATE, coarse literature values (a handful of
+points across the visible). They are fine for learning, method development and relative
+comparisons, not for a mask you will pay for. The index of deposited films (TiO2, SiN,
+a-Si ...) depends strongly on the process: measure your film (ellipsometry) or take a
+dataset from refractiveindex.info and load it with ``register_yaml`` / ``register_table``.
+``info(name)`` tells where a material's data comes from and its valid wavelength range;
+tables refuse to extrapolate outside that range.
 """
 import numpy as np
 
@@ -53,12 +61,34 @@ def load_nk_csv(path):
             if not line or line.startswith("#"):
                 continue
             parts = line.replace(";", ",").split(",")
+            if not parts[0].replace(".", "", 1).replace("e-", "", 1).replace("-", "", 1).isdigit():
+                continue                                   # header line
             wl.append(float(parts[0])); n.append(float(parts[1]))
             k.append(float(parts[2]) if len(parts) > 2 else 0.0)
     return np.array(wl), np.array(n), np.array(k)
 
-def register_table(name, wl, n, k):
-    idx = np.argsort(wl); _TABLES[name] = (np.array(wl)[idx], np.array(n)[idx], np.array(k)[idx])
+_NOTES = {"SiO2": "Sellmeier fit (Malitson 1965), fused silica — reliable 0.21-3.7 um",
+          "TiO2": "approximate single-pole dispersion formula, visible only",
+          "Si": "approximate formula with a coarse two-level loss, visible only",
+          "Ag": "coarse Drude model — qualitative only",
+          "air": "n = 1"}
+
+
+def register_table(name, wl, n, k, note="user-registered table"):
+    """Register tabulated n,k data (wl in um). The table is used by eps_of / n_table."""
+    idx = np.argsort(wl); _TABLES[name] = (np.array(wl, float)[idx], np.array(n, float)[idx], np.array(k, float)[idx])
+    _NOTES[name] = note
+
+
+def _first_comment(path):
+    with open(path) as f:
+        line = f.readline().strip()
+    if not line.startswith("#"):
+        return ""
+    line = line.lstrip("# ").strip()
+    if "(" in line and line.endswith(")"):               # "wavelength_um,n,k  (source ...)" -> source
+        line = line[line.index("(") + 1:-1]
+    return line.replace(" - approx.", "").replace("approx., ", "").strip()
 
 def _load_builtin_tables():
     if not _os.path.isdir(_DATA_DIR):
@@ -67,7 +97,9 @@ def _load_builtin_tables():
         if f.endswith(".csv"):
             name = f[:-4]
             try:
-                register_table(name, *load_nk_csv(_os.path.join(_DATA_DIR, f)))
+                p = _os.path.join(_DATA_DIR, f)
+                register_table(name, *load_nk_csv(p),
+                               note="built-in APPROXIMATE table — " + _first_comment(p))
             except Exception:
                 pass
 _load_builtin_tables()
@@ -75,18 +107,44 @@ _load_builtin_tables()
 def n_table(name, lam):
     """Complex refractive index (n+ik) at λ from the table, linear interpolation."""
     wl, n, k = _TABLES[name]
+    la = np.asarray(lam, float)
+    if np.any(la < wl[0] - 1e-9) or np.any(la > wl[-1] + 1e-9):
+        raise ValueError(f"material '{name}': wavelength {float(np.min(la)):.4g}-{float(np.max(la)):.4g} um is outside "
+                         f"the tabulated range {wl[0]:.4g}-{wl[-1]:.4g} um (no extrapolation). "
+                         f"Register a wider dataset with materials.register_yaml / register_table.")
     nn = np.interp(lam, wl, n); kk = np.interp(lam, wl, k)
     return nn + 1j * kk
 
 # extend eps_of to also recognize table names
 _eps_of_base = eps_of
 def eps_of(material, lam):  # noqa: F811
+    """Complex permittivity (n + ik)^2 at wavelength lam (um). material: a registered name
+    (table or formula) or a number (constant refractive index)."""
     if isinstance(material, str) and material in _TABLES:
         return n_table(material, lam) ** 2
+    if isinstance(material, str) and material not in MATERIALS:
+        import difflib
+        near = difflib.get_close_matches(material, list_materials(), n=3, cutoff=0.4)
+        raise ValueError(f"unknown material '{material}'" + (f" (did you mean {', '.join(near)}?)" if near else "")
+                         + f". Available: {', '.join(list_materials())}")
     return _eps_of_base(material, lam)
 
+
 def list_materials():
-    return sorted(list(MATERIALS.keys()) + list(_TABLES.keys()))
+    return sorted(set(MATERIALS.keys()) | set(_TABLES.keys()))
+
+
+def info(name):
+    """Provenance of a material -> {name, kind, range_um, points, note, approximate}."""
+    if name in _TABLES:
+        wl = _TABLES[name][0]; note = _NOTES.get(name, "table")
+        return {"name": name, "kind": "table", "range_um": (float(wl[0]), float(wl[-1])),
+                "points": int(len(wl)), "note": note, "approximate": "APPROXIMATE" in note}
+    if name in MATERIALS:
+        note = _NOTES.get(name, "user-registered formula")
+        return {"name": name, "kind": "formula", "range_um": None, "points": None, "note": note,
+                "approximate": "approx" in note.lower() or "coarse" in note.lower()}
+    raise ValueError(f"unknown material '{name}'")
 
 
 # --- E7: refractiveindex.info YAML import + broadband + anisotropic ---
@@ -128,9 +186,10 @@ def register_yaml(name, path):
     """Register a refractiveindex.info YAML as a material (table or formula)."""
     kind, *rest = load_nk_yaml(path)
     if kind == "table":
-        register_table(name, *rest)
+        register_table(name, *rest, note=f"refractiveindex.info YAML: {_os.path.basename(path)}")
     else:
         MATERIALS[name] = lambda lam, fn=rest[0]: fn(lam)
+        _NOTES[name] = f"refractiveindex.info YAML formula: {_os.path.basename(path)}"
     return kind
 
 
