@@ -7,6 +7,20 @@ from scipy.linalg import eig
 from .convmat import convmat1d
 
 
+def rayleigh_safe_scale(kx, ky, ers, tol=1e-9):
+    """Scale factor (1 or 1+1e-7, ...) for the transverse wavevectors that moves every order
+    off an exact Rayleigh (Wood) anomaly, where kx^2 + ky^2 = eps of the gap/incidence/exit
+    medium, kz = 0 and the homogeneous-medium matrices become singular. Equivalent to
+    detuning the wavelength by ~1e-7 relative — far below any physical resolution."""
+    kt2 = np.asarray(kx) ** 2 + np.asarray(ky) ** 2
+    s = 1.0
+    for _ in range(8):
+        if not any(np.any(np.abs(er - kt2 * s * s) < tol) for er in ers):
+            break
+        s *= 1.0 + 1e-7
+    return s
+
+
 def homogeneous_modes(KX, KY, er, ur=1.0):
     """Eigenmodes of a homogeneous region (W=I, V, KZ)."""
     P = KX.shape[0]

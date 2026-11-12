@@ -15,30 +15,19 @@ It also produces scale statistics + a preview without materializing any atom.
 """
 import os
 import numpy as np
-from . import materials, shapes, cache
-from .solver2d import solve_rcwa_2d
+from . import design
 
 
-def build_phase_lut(lam0, L, H, mat, shape, M, n_pillar, n_size=20, nbin=2048):
-    """Meta-atom library (cached) + phase→size LUT. Convention-corrected."""
-    sizes = np.linspace(0.06, L - 0.05, n_size)
-    def _lib():
-        lp = []; la = []
-        for s in sizes:
-            eps = shapes.rasterize(shape, s, L, shapes.DEFAULT_N, n_pillar=n_pillar)
-            r = solve_rcwa_2d(lam0, 0, 0, 1, 1, L, L, [(eps, H)], M, M, pol=(0., 1.))
-            t0 = r["ty"][r["i0"]]; lp.append(np.angle(t0)); la.append(abs(t0))
-        lp = np.unwrap(np.array(lp)); lp -= lp.min()
-        return {"phm": np.mod(lp, 2 * np.pi), "am": np.array(la)}
-    c = cache.cached_library("libdesign", {"lam0": lam0, "L": L, "H": H, "mat": mat,
-                             "shape": shape, "M": M, "n": round(n_pillar, 3)}, _lib)
-    libphm = np.mod(-c["phm"], 2 * np.pi)                       # physical/FDTD convention
-    phases = np.linspace(0, 2 * np.pi, nbin, endpoint=False)
-    # nearest atom for each phase bin (circular distance) — vectorized
-    d = np.abs(np.angle(np.exp(1j * (libphm[None, :] - phases[:, None]))))
-    lut_k = np.argmin(d, axis=1)                                # nbin -> size index
-    return {"sizes": sizes, "libphm": libphm, "libam": c["am"],
-            "lut_size": sizes[lut_k], "lut_k": lut_k, "nbin": nbin}
+def build_phase_lut(lam0, L, H, mat, shape, M, n_pillar=None, n_size=20, nbin=2048, n_sub=1.0):
+    """Meta-atom library (cached, physics convention) + phase→size LUT.
+    Same library and selection rule (complex-error LUT, see design.phase_lut) as design_lens."""
+    lib = design.meta_atom_library(lam0, L, H, sizes=design.default_sizes(L, n_size), shape=shape,
+                                   material=mat, n_pillar=(n_pillar if n_pillar is not None else 2.4),
+                                   M=M, n_sub=n_sub)
+    lut_k, phases = design.phase_lut(lib["t"], nbin=nbin)
+    return {"sizes": lib["sizes"], "t": lib["t"], "libphm": np.mod(np.angle(lib["t"]), 2 * np.pi),
+            "libam": lib["amp"], "lut_size": lib["sizes"][lut_k], "lut_k": lut_k, "nbin": nbin,
+            "n": lib["n"]}
 
 
 def size_map_vectorized(lut, lam0, L, f, ci):
@@ -58,8 +47,8 @@ def design_large_lens(lam0, L, H, mat, shape, D_lens, f, M, gds_dir=None,
     If gds_dir is given each tile gets its own .gds; if None, statistics+preview only.
     Returns: statistics dictionary + preview (size_map_ds, ci_ds)."""
     from . import gds
-    n_pillar = float(np.real(np.sqrt(materials.eps_of(mat, lam0)))) if mat else 2.4
-    lut = build_phase_lut(lam0, L, H, mat, shape, M, n_pillar)
+    lut = build_phase_lut(lam0, L, H, mat, shape, M)
+    n_pillar = float(np.real(lut["n"]))
     Nc = int(round(D_lens / L)); D_lens = Nc * L
     ci = (np.arange(Nc) - (Nc - 1) / 2) * L
     NA = float(np.sin(np.arctan(D_lens / 2 / f)))

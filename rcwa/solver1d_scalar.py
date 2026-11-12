@@ -12,6 +12,7 @@ import numpy as np
 from scipy.linalg import eig
 from .convmat import convmat1d
 from .redheffer import redheffer_star
+from .layer import rayleigh_safe_scale
 
 
 def _layer_S(W, V, q, k0, d, Wg, Vg):
@@ -33,14 +34,18 @@ def solve_scalar_1d(lam0, theta_deg, er_ref, er_trn, period, eps_x, thickness, M
     """Scalar 1D RCWA. pol='TE'|'TM'; rule='laurent'|'inverse' (for TM).
     symmetric=True: for normal incidence + a mirror-symmetric cell, solves in the
     even-parity subspace (~half size, eig ~3-4x faster, identical result) — B6.
-    Returns: dict(Rtot, Ttot, R, T, orders)."""
+    Returns: dict(Rtot, Ttot, R, T, orders).
+    Im(eps) > 0 means absorption (inputs are conjugated internally; see solve_rcwa_1d)."""
     if symmetric:
         if abs(theta_deg) > 1e-9:
             raise ValueError("symmetric=True is only valid at normal incidence (theta=0).")
         return _solve_scalar_1d_sym(lam0, er_ref, er_trn, period, eps_x, thickness, M, pol, rule)
+    er_ref = np.conj(complex(er_ref)); er_trn = np.conj(complex(er_trn))
+    eps_x = np.conj(np.asarray(eps_x, complex))
     k0 = 2 * np.pi / lam0; n_ref = np.sqrt(er_ref); th = np.deg2rad(theta_deg)
     m = np.arange(-M, M + 1); P = 2 * M + 1
-    kx = n_ref * np.sin(th) - m * (lam0 / period); KX = np.diag(kx.astype(complex))
+    kx = n_ref * np.sin(th) - m * (lam0 / period)
+    kx = kx * rayleigh_safe_scale(kx, 0.0, (1.0, er_ref, er_trn)); KX = np.diag(kx.astype(complex))
     I = np.eye(P, dtype=complex)
     E = convmat1d(np.asarray(eps_x, complex), P)
     Wg, Vg, _ = _modes(KX @ KX - I, I)               # gap (free space)
@@ -93,8 +98,11 @@ def _parity_bases(M):
 
 def _solve_scalar_1d_sym(lam0, er_ref, er_trn, period, eps_x, thickness, M, pol, rule):
     """B6: solution via even-parity reduction for a symmetric cell at normal incidence."""
+    er_ref = np.conj(complex(er_ref)); er_trn = np.conj(complex(er_trn))
+    eps_x = np.conj(np.asarray(eps_x, complex))
     k0 = 2 * np.pi / lam0
     m = np.arange(-M, M + 1); P = 2 * M + 1; kx = -m * (lam0 / period)
+    kx = kx * rayleigh_safe_scale(kx, 0.0, (1.0, er_ref, er_trn))
     Te, To = _parity_bases(M); D = M + 1; I = np.eye(D, dtype=complex)
     KX2e = Te.conj().T @ np.diag((kx ** 2).astype(complex)) @ Te
     E = convmat1d(np.asarray(eps_x, complex), P); Ee = Te.conj().T @ E @ Te

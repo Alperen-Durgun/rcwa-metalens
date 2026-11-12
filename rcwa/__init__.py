@@ -15,6 +15,7 @@ from . import shapes
 from . import gds
 from . import fullwave
 from . import convention
+from . import design
 from .convention import to_physical, physical_phase
 from .parallel import parallel_map
 
@@ -22,5 +23,5 @@ __all__ = ["convmat1d", "convmat2d", "redheffer_star", "homogeneous_modes",
            "grating_modes", "modes_from_ER", "layer_smatrix",
            "solve_rcwa_1d", "solve_rcwa_2d", "solve_1d_auto", "solve_2d_auto", "solve_scalar_1d",
            "materials", "cache", "metrics", "shapes", "gds", "fullwave", "modes_from_ER_cached", "parallel_map",
-           "convention", "to_physical", "physical_phase"]
+           "convention", "design", "to_physical", "physical_phase"]
 __version__ = "0.2.0.dev0"

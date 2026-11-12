@@ -3,7 +3,7 @@ Combines all steps: k-vectors -> layer eigenmodes -> S-matrix ->
 Redheffer star -> reflection/transmission amplitudes -> diffraction efficiencies.
 """
 import numpy as np
-from .layer import homogeneous_modes, grating_modes, layer_smatrix
+from .layer import homogeneous_modes, grating_modes, layer_smatrix, rayleigh_safe_scale
 from .redheffer import redheffer_star
 
 
@@ -15,7 +15,14 @@ def solve_rcwa_1d(lam0, theta_deg, er_ref, er_trn, period, layers, P,
     pol    : (TM_component, TE_component)   TE = E along the y axis (out of plane)
     rule   : "inverse" (Li factorization, fast TM convergence; default) or "laurent"
     Returns: R, T (per-order efficiency), totals, zeroth-order amplitude.
+
+    Material convention: permittivities follow the usual optics convention eps = (n + ik)^2,
+    i.e. Im(eps) > 0 means ABSORPTION (as in refractiveindex.info, grcwa, Tidy3D). The solver
+    itself works in exp(+j*omega*t), so the inputs are conjugated internally. Output amplitudes
+    are in the solver convention — see rcwa/convention.py.
     """
+    er_ref = np.conj(complex(er_ref)); er_trn = np.conj(complex(er_trn))
+    layers = [(np.conj(np.asarray(e, dtype=complex)), d) for e, d in layers]
     k0 = 2 * np.pi / lam0
     n_ref = np.sqrt(er_ref)
     theta = np.deg2rad(theta_deg); phi = np.deg2rad(phi_deg)
@@ -25,8 +32,9 @@ def solve_rcwa_1d(lam0, theta_deg, er_ref, er_trn, period, layers, P,
     ky_inc = n_ref * np.sin(theta) * np.sin(phi)
     kz_inc = n_ref * np.cos(theta)
     kx = kx_inc - p * (lam0 / period)
-    KX = np.diag(kx.astype(complex))
-    KY = ky_inc * np.eye(P, dtype=complex)
+    s = rayleigh_safe_scale(kx, ky_inc, (1.0, er_ref, er_trn))
+    KX = np.diag((s * kx).astype(complex))
+    KY = (s * ky_inc) * np.eye(P, dtype=complex)
 
     # gap medium (free space) — all layers are connected relative to this
     Wg, Vg, _ = homogeneous_modes(KX, KY, 1.0, 1.0)

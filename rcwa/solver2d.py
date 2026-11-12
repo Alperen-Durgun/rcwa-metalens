@@ -8,7 +8,7 @@ and energy conservation.
 """
 import numpy as np
 from .convmat import convmat2d, convmat2d_li
-from .layer import homogeneous_modes, modes_from_ER, layer_smatrix
+from .layer import homogeneous_modes, modes_from_ER, layer_smatrix, rayleigh_safe_scale
 from .redheffer import redheffer_star
 
 
@@ -21,7 +21,14 @@ def solve_rcwa_2d(lam0, theta_deg, phi_deg, er_ref, er_trn, Lx, Ly, layers, Mx, 
     pol    : (TM, TE) components
     rule   : "li" (default; Li 1997 factorization, see convmat2d_li — far faster convergence
              at high index contrast) or "laurent" (plain rule, kept for comparison)
+
+    Material convention: permittivities follow the usual optics convention eps = (n + ik)^2,
+    i.e. Im(eps) > 0 means ABSORPTION (as in refractiveindex.info, grcwa, Tidy3D). The solver
+    itself works in exp(+j*omega*t), so the inputs are conjugated internally. Output amplitudes
+    are in the solver convention — see rcwa/convention.py.
     """
+    er_ref = np.conj(complex(er_ref)); er_trn = np.conj(complex(er_trn))
+    layers = [(np.conj(np.asarray(e, dtype=complex)), d) for e, d in layers]
     k0 = 2 * np.pi / lam0
     n_ref = np.sqrt(er_ref)
     th = np.deg2rad(theta_deg); ph = np.deg2rad(phi_deg)
@@ -31,8 +38,10 @@ def solve_rcwa_2d(lam0, theta_deg, phi_deg, er_ref, er_trn, Lx, Ly, layers, Mx, 
     kx_inc = n_ref * np.sin(th) * np.cos(ph)
     ky_inc = n_ref * np.sin(th) * np.sin(ph)
     kz_inc = n_ref * np.cos(th)
-    KX = np.diag((kx_inc - MXf * (lam0 / Lx)).astype(complex))
-    KY = np.diag((ky_inc - MYf * (lam0 / Ly)).astype(complex))
+    kxv0 = kx_inc - MXf * (lam0 / Lx); kyv0 = ky_inc - MYf * (lam0 / Ly)
+    s = rayleigh_safe_scale(kxv0, kyv0, (1.0, er_ref, er_trn))
+    KX = np.diag((s * kxv0).astype(complex))
+    KY = np.diag((s * kyv0).astype(complex))
     Px, Py = 2 * Mx + 1, 2 * My + 1
 
     Wg, Vg, _ = homogeneous_modes(KX, KY, 1.0, 1.0)

@@ -355,16 +355,52 @@ def test_metrics_professional():
 
 
 def test_largelens_vectorized():
-    """E6: large-lens vectorized selection + LUT matches the argmin selection exactly."""
+    """E6: the large-lens LUT applies the same rule as design.phase_lut (complex-error match)."""
     from rcwa import largelens as LL
-    import numpy as np
     st = LL.design_large_lens(0.633, 0.35, 0.60, "TiO2_t", "circle", 8.0, 10.0, 7, gds_dir=None)
     assert st["n_atoms"] > 0 and st["NA"] > 0 and st["preview_size_nm"].shape[0] > 0
-    lut = LL.build_phase_lut(0.633, 0.35, 0.60, "TiO2_t", "circle", 7, st["n_pillar"])
-    r = 1.0; phi = np.mod(-(2 * np.pi / 0.633) * (np.sqrt(r ** 2 + 10 ** 2) - 10), 2 * np.pi)
-    b = int(phi / (2 * np.pi) * lut["nbin"]) % lut["nbin"]
-    k = int(np.argmin(np.abs(np.angle(np.exp(1j * (lut["libphm"] - phi))))))
-    assert abs(lut["lut_size"][b] - lut["sizes"][k]) < 1e-9
+    lut = LL.build_phase_lut(0.633, 0.35, 0.60, "TiO2_t", "circle", 7)
+    t = lut["t"]; nb = lut["nbin"]
+    for b in (0, nb // 3, nb - 1):
+        phi = (b + 0.5) * 2 * np.pi / nb
+        k = int(np.argmin(np.abs(t / np.abs(t).max() - np.exp(1j * phi))))
+        assert abs(lut["lut_size"][b] - lut["sizes"][k]) < 1e-12
+
+
+def test_design_core_lens():
+    """design.design_lens + analyze_focus: full 2pi library, focus near f, Strehl <= 1,
+    the on-axis fast path agrees with the full propagation, selection respects the mask."""
+    from rcwa import design as dz
+    d = dz.design_lens(0.633, 0.35, 0.60, 8.0, 10.0, material="TiO2_t")
+    a = dz.analyze_focus(d)
+    assert d["lib"]["coverage"] >= 0.95 and np.all(np.diff(d["lib"]["phase"]) > -0.5)
+    assert (d["idx"][~d["inside"]] == -1).all() and (d["idx"][d["inside"]] >= 0).all()
+    assert len(d["placements"]) == int(d["inside"].sum())
+    assert 0.7 * 10.0 < a["z_focus"] <= 10.2                 # focal shift toward the lens (low Fresnel number)
+    assert 0.6 < a["strehl"] <= 1.005 and 0.5 < a["eff_absolute"] <= 1.0
+    assert 0.6 < a["fwhm"] / a["diffraction_fwhm"] < 1.3
+    ff = a["field"]; I = ff.intensity(a["z_focus"])
+    assert abs(ff.on_axis(a["z_focus"]) / I.max() - 1) < 0.08
+
+
+def test_select_atoms_prefers_bright():
+    """Complex-error selection avoids a dark atom that has exactly the right phase."""
+    from rcwa import design as dz
+    t = np.array([1.0 * np.exp(1j * 0.0), 0.15 * np.exp(1j * 1.0), 1.0 * np.exp(1j * 1.35), 1.0 * np.exp(1j * 3.0)])
+    idx_c, _ = dz.select_atoms(t, np.array([1.0]), mode="complex", n_offset=1)
+    idx_p, _ = dz.select_atoms(t, np.array([1.0]), mode="phase", n_offset=1)
+    assert idx_p[0] == 1 and idx_c[0] == 2
+
+
+def test_cli_parameter_introspection():
+    """Every experiment type exposes its parameters to the CLI help; typos are rejected."""
+    from rcwa import cli, experiments as R
+    for name in R.RUNNERS:
+        assert len(cli.experiment_params(name)) >= 1, name
+    keys = dict(cli.experiment_params("metalens_design_full"))
+    assert {"lam0", "D_lens", "f", "material", "shape", "n_sub"} <= set(keys) and keys["D_lens"] == "16.0"
+    assert "angle_max" in dict(cli.experiment_params("fov_analysis")) and "D_lens" in dict(cli.experiment_params("fov_analysis"))
+    assert cli.main(["metalens_design_full", "D_len=5"]) == 2 and cli.main(["no_such_type"]) == 1
 
 
 def test_backends_available():
@@ -503,6 +539,42 @@ def test_rasterize_resolution_and_fill():
     assert abs(fill - np.pi * (s / 2) ** 2 / L ** 2) < 2e-3
     aa = np.real(shapes.rasterize("circle", s, L, 32, n_pillar=2.0, aa=8))
     assert aa.shape == (32, 32) and abs((aa.mean() - 1.0) / 3.0 - np.pi * (s / 2) ** 2 / L ** 2) < 2e-3
+
+
+def test_lossy_material_absorbs():
+    """Im(eps) > 0 is ABSORPTION in every solver (never gain); a lossy slab matches the
+    analytic absorbing-film result and the grcwa reference."""
+    from rcwa import solve_rcwa_2d, solve_scalar_1d, hiacc2d
+    lam, d, nk = 0.55, 0.3, 2.0 + 0.12j; eps = nk ** 2
+    k0 = 2 * np.pi / lam; dl = k0 * nk * d                     # analytic film (exp(-iwt): n+ik decays)
+    m11 = np.cos(dl); m12 = -1j * np.sin(dl) / nk; m21 = -1j * nk * np.sin(dl)
+    t = 2 / (2 * m11 + m12 + m21); r = (m12 - m21) / (2 * m11 + m12 + m21)
+    Ra, Ta = abs(r) ** 2, abs(t) ** 2
+    assert Ra + Ta < 0.95
+    r1 = solve_rcwa_1d(lam, 0, 1, 1, 0.3, [(np.full(64, eps, complex), d)], 5)
+    r2 = solve_rcwa_2d(lam, 0, 0, 1, 1, 0.3, 0.3, [(np.full((16, 16), eps), d)], 1, 1)
+    r3 = solve_scalar_1d(lam, 0, 1, 1, 0.3, np.full(64, eps, complex), d, 2, "TM")
+    for rr in (r1, r2, r3):
+        assert abs(rr["Rtot"] - Ra) < 1e-6 and abs(rr["Ttot"] - Ta) < 1e-6
+    L = 0.35; x = (np.arange(128) + 0.5) / 128 * L; X, Y = np.meshgrid(x, x, indexing="ij")
+    ep = np.where((np.abs(X - L / 2) < 0.1) & (np.abs(Y - L / 2) < 0.1), eps, 1.0)
+    rn = solve_rcwa_2d(0.633, 0, 0, 1, 1, L, L, [(ep, 0.4)], 6, 6, pol=(0., 1.))
+    rg = hiacc2d.solve_2d_grcwa(0.633, 0, 0, 1, 1, L, L, ep, 0.4, nG=150, pol=(0., 1.))
+    assert rn["Rtot"] + rn["Ttot"] < 0.99
+    assert abs(rn["Ttot"] - rg["Ttot"]) < 0.02 and abs(rn["Rtot"] - rg["Rtot"]) < 0.02
+
+
+def test_rayleigh_anomaly_is_finite():
+    """period = integer * wavelength puts an order exactly at grazing (kz = 0): the solvers
+    must stay finite and conserve energy there."""
+    from rcwa import solve_rcwa_2d, solve_scalar_1d
+    x = (np.arange(1024) + 0.5) / 1024; eps = np.where(x < 0.5, 4.0, 1.0)
+    r1 = solve_rcwa_1d(0.55, 0, 1, 1, 1.1, [(eps.astype(complex), 0.3)], 41)
+    r3 = solve_scalar_1d(0.55, 0, 1, 1, 1.1, eps, 0.3, 20, "TE")
+    e2 = np.where(np.add.outer(np.abs(x[::8] - 0.5), np.abs(x[::8] - 0.5) * 0) < 0.25, 4.0, 1.0)
+    r2 = solve_rcwa_2d(0.55, 0, 0, 1, 1, 1.1, 1.1, [(e2, 0.3)], 3, 3)
+    for r in (r1, r2, r3):
+        assert np.isfinite(r["Rtot"]) and abs(r["Rtot"] + r["Ttot"] - 1) < 1e-3
 
 
 if __name__ == "__main__":
