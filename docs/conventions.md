@@ -55,7 +55,23 @@ super-cell solve.
   *different* pillars is ignored. It is the standard first-pass design method and it is an
   approximation.
 
-## Focal analysis and metric definitions
+### Resonance-aware selection
+
+A uniform size sweep can step over a narrow guided-mode resonance. The default TiO₂ library at
+633 nm has one at ≈ 221 nm that is about 2 nm wide (|t| → 0.01), between two samples that both
+look bright. Fabrication errors of a few nm then push atoms onto it.
+
+* `refine_library(lib)` splits every interval whose midpoint deviates from complex linear
+  interpolation by more than `tol` (default 0.05 of max |t|), down to `min_step` (0.5 nm), with
+  at most `max_solves` extra solves. A resonance much narrower than an interval that leaves no
+  trace at the interval's ends or midpoint can still be missed.
+* Resonances are detected as |t| dips (prominence ≥ 0.2). For a lossless sub-wavelength lattice
+  with one propagating order, a resonance drives |t| toward zero, so a deep dip is the relevant
+  signature. Lossy or multi-order cases are not covered by this argument.
+* `guard_nm` excludes atoms within that distance of a resonance band. `mode="robust"` with
+  `sigma_nm` minimizes the expected error over N(0, σ²) size errors instead. It needs a refined
+  library, because the size response is interpolated between samples.
+
 
 `design.analyze_focus` propagates the cell-sampled aperture field with the angular-spectrum
 method (4 sub-samples per cell, zero-padded window) and reports:

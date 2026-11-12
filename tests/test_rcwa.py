@@ -644,6 +644,70 @@ def test_substrate_energy_bookkeeping():
     assert d["lib"]["coverage"] > 0.9 and 0.4 < a["eff_absolute"] < 1.0 and a["strehl"] <= 1.005
 
 
+
+def _synthetic_resonant_library():
+    """Dense synthetic library: full 2pi phase ramp with a narrow, deep |t| dip at 0.5 um."""
+    s = np.linspace(0.0, 1.0, 1001)
+    a = 1 - 0.99 * np.exp(-((s - 0.5) / 0.004) ** 2)
+    return {"sizes": s, "t": a * np.exp(2j * np.pi * s), "refined": True}
+
+
+def test_size_error_stats_analytic():
+    """B3: for a linear t(s) the Gauss-Hermite statistics are exact: E[t] = t(s + bias),
+    Var[t] = |dt/ds|^2 sigma^2."""
+    from rcwa import design as dz
+    s = np.linspace(0.1, 0.3, 41); c0, c1 = 1 + 0.5j, 2 - 1j
+    lib = {"sizes": s, "t": c0 + c1 * s}
+    mean, var = dz.size_error_stats(lib, sigma_nm=3.0, bias_nm=1.0)
+    k = slice(5, -5)                                           # away from the clamped ends
+    assert np.allclose(mean[k], c0 + c1 * (s[k] + 1e-3), atol=1e-12)
+    assert np.allclose(var[k], abs(c1) ** 2 * (3e-3) ** 2, rtol=1e-9)
+    m0, v0 = dz.size_error_stats(lib, sigma_nm=0.0)
+    assert np.allclose(m0, lib["t"]) and np.allclose(v0, 0)
+
+
+def test_resonance_guard_and_robust_selection():
+    """B1-B3 on a synthetic library: the dip is detected, the guard band excludes it, and the
+    robust rule keeps a larger distance from the resonance than the nominal complex rule."""
+    from rcwa import design as dz
+    lib = _synthetic_resonant_library()
+    res = dz.find_resonances(lib["sizes"], lib["t"])
+    assert len(res) == 1 and abs(res[0]["center"] - 0.5) < 1e-9 and res[0]["t_min"] < 0.02
+    assert 0.004 < res[0]["width"] < 0.012
+    lib["resonances"] = res
+    ok = dz.resonance_mask(lib, guard_nm=3)
+    assert not ok[np.abs(lib["sizes"] - 0.5) < 0.004].any() and ok[np.abs(lib["sizes"] - 0.5) > 0.02].all()
+    lut_g, _ = dz.phase_lut(lib["t"], allowed=ok)
+    assert ok[lut_g].all()
+    phi = np.array([2 * np.pi * 0.508])                        # target just beside the dip
+    ic, _ = dz.select_atoms(lib["t"], phi, mode="complex", n_offset=1)
+    ir, _ = dz.select_atoms(lib["t"], phi, mode="robust", n_offset=1,
+                            t_stats=dz.size_error_stats(lib, sigma_nm=4))
+    dist = lambda i: abs(lib["sizes"][i[0]] - 0.5)              # noqa: E731
+    assert dist(ir) > dist(ic) + 0.002
+    d = dz.design_lens(0.633, 0.35, 0.60, 4.0, 6.0, lib=lib, mode="robust", sigma_nm=3, guard_nm=2)
+    used = d["idx"][d["inside"]]
+    assert d["allowed"][used].all() and d["mode"] == "robust"
+    try:
+        dz.design_lens(0.633, 0.35, 0.60, 4.0, 6.0, lib=lib, mode="robust")
+        raise AssertionError("robust mode without sigma_nm must fail")
+    except ValueError:
+        pass
+
+
+def test_refine_library_finds_resonance():
+    """B1: a 12.6 nm sweep of the default TiO2 library (633 nm, L=350, H=600) steps over the
+    guided-mode resonance near 221 nm; adaptive refinement finds it (M=4 to keep it cheap)."""
+    from rcwa import design as dz
+    s = np.linspace(0.186, 0.249, 6)
+    lib = dz.meta_atom_library(0.633, 0.35, 0.60, sizes=s, material="TiO2_t", M=4)
+    assert dz.find_resonances(lib["sizes"], lib["t"]) == [] and lib["amp"].min() > 0.9
+    ref = dz.refine_library(lib)
+    assert ref["refined"] and ref["refine_converged"] and len(ref["resonances"]) == 1
+    r = ref["resonances"][0]
+    assert 0.219 < r["center"] < 0.223 and r["t_min"] < 0.3 and r["width"] < 0.004
+    assert np.all(np.diff(ref["sizes"]) > 0) and set(np.round(s, 9)) <= set(np.round(ref["sizes"], 9))
+
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio
     utf8_stdio()

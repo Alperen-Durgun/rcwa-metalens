@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Added — resonance-aware, tolerance-robust atom selection (roadmap B1–B3)
+
+* `design.refine_library`: adaptive refinement of a meta-atom library. Each interval is checked
+  at its midpoint against complex linear interpolation and split until it agrees within `tol`.
+  `design.find_resonances` records the transmission dips (`lib["resonances"]`: centre,
+  half-depth band, width, minimum |t|).
+* `design.resonance_mask` and `design_lens(guard_nm=...)`: exclude atoms near a resonance.
+* `design.size_error_stats` and `mode="robust"` with `sigma_nm`: atoms are chosen by the expected
+  squared error under a Gaussian size error, `|E[t]/A − e^{iφ}|² + Var[t]/A²`, from the refined
+  library (no extra solves).
+* `design.max_phase_gap`; `design_lens` warns when the usable atoms leave a phase gap > π/4.
+* Defaults are unchanged (`mode="complex"`, no refinement, no guard). The default selection
+  arithmetic is the same as in 0.2.1; the default lens above gives the 0.2.1 numbers.
+
+Measured (TiO₂ circle, λ = 633 nm, Λ = 350 nm, H = 600 nm, M = 7, D = 16 µm, f = 20 µm; uniform
+size bias, the shifted sizes re-solved with RCWA; LPA, no FDTD). Absolute efficiency:
+
+| Selection | 0 | −3 nm | −4 nm | −8 nm | +3 nm | +4 nm |
+|---|---|---|---|---|---|---|
+| default (20 sizes) | 0.816 | 0.723 | 0.721 | 0.770 | 0.803 | 0.803 |
+| refined + `guard_nm=4` | 0.831 | 0.830 | 0.824 | 0.768 | 0.816 | 0.821 |
+| refined + `mode="robust", sigma_nm=3` | 0.831 | 0.832 | 0.832 | 0.807 | 0.825 | 0.822 |
+
+The refinement found the guided-mode resonance at 221.05 nm with 39 extra solves (59 sizes in
+total). The largest drop within ±4 nm goes from 9.5 points to 0.9 points (robust). The
+near-resonance atoms are also where the LPA is least reliable, so avoiding them helps for a
+second reason that this table does not measure.
+
 ## 0.2.1
 
 * Fixed: on Windows the command line crashed with `UnicodeEncodeError` when its output was
