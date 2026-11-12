@@ -1,17 +1,17 @@
-"""E8 — UZAK-ALAN / BSDF DIŞA AKTARIM + BASİT DRC (üretim/sistem köprüsü).
+"""E8 — FAR-FIELD / BSDF EXPORT + SIMPLE DRC (fabrication/system bridge).
 
-- bsdf_orders(result, lam, Lx, Ly): difraksiyon mertebelerini açı + verim (BSDF-benzeri)
-  tablosuna çevirir; CSV'ye yazılabilir (sistem/ışın-optiği araçlarına devir).
-- far_field(E0, dx, lam): açıklık alanından uzak-alan açısal şiddet dağılımı.
-- drc_check(placements, min_feature, min_gap): üretim kuralı denetimi (min öznitelik/aralık).
+- bsdf_orders(result, lam, Lx, Ly): converts diffraction orders into an angle + efficiency
+  (BSDF-like) table; can be written to CSV (hand-off to system/ray-optics tools).
+- far_field(E0, dx, lam): far-field angular intensity distribution from the aperture field.
+- drc_check(placements, min_feature, min_gap): design-rule check (min feature/gap).
 """
 import numpy as np
 
 
 def bsdf_orders(result, lam, Lx, Ly, csv_path=None):
-    """2B çözüm sonucundan (orders=(MXf,MYf), R, T) her mertebe için
-    saçılma açısı (θ,φ) + verim tablosu. csv_path verilirse CSV yazar.
-    Döndürür: list[dict]."""
+    """From a 2D solve result (orders=(MXf,MYf), R, T): table of scattering angle (θ,φ)
+    + efficiency for each order. Writes a CSV if csv_path is given.
+    Returns: list[dict]."""
     MXf, MYf = result["orders"]; R = result["R"]; T = result["T"]
     rows = []
     for i in range(len(MXf)):
@@ -33,8 +33,8 @@ def bsdf_orders(result, lam, Lx, Ly, csv_path=None):
 
 
 def far_field(E0, dx, lam):
-    """Açıklık alanı E0(x,y) -> uzak-alan açısal şiddet I(θx,θy) (Fraunhofer/FFT).
-    Döndürür: (I_norm, theta_x_deg, theta_y_deg)."""
+    """Aperture field E0(x,y) -> far-field angular intensity I(θx,θy) (Fraunhofer/FFT).
+    Returns: (I_norm, theta_x_deg, theta_y_deg)."""
     E0 = np.asarray(E0, complex); N = E0.shape[0]
     F = np.fft.fftshift(np.fft.fft2(E0)); I = np.abs(F) ** 2
     fx = np.fft.fftshift(np.fft.fftfreq(N, d=dx))       # 1/um
@@ -43,18 +43,18 @@ def far_field(E0, dx, lam):
 
 
 def drc_check(placements, min_feature=0.05, min_gap=0.04, shape_key="params"):
-    """Basit üretim kuralı denetimi (DRC):
-      - min öznitelik: her sütun boyutu >= min_feature (um)
-      - min aralık: komşu sütunlar arası kenar-kenar boşluk >= min_gap (um)
-    Döndürür: {ok, n_feature_viol, n_gap_viol, worst_gap, violations[list]}."""
+    """Simple design-rule check (DRC):
+      - min feature: every pillar size >= min_feature (um)
+      - min gap: edge-to-edge spacing between neighboring pillars >= min_gap (um)
+    Returns: {ok, n_feature_viol, n_gap_viol, worst_gap, violations[list]}."""
     xs = np.array([p["x"] for p in placements]); ys = np.array([p["y"] for p in placements])
     sizes = np.array([float(np.atleast_1d(p[shape_key])[0]) for p in placements])
     viol = []
-    # öznitelik
+    # feature size
     fv = np.where(sizes < min_feature)[0]
     for i in fv:
-        viol.append({"tip": "min_feature", "i": int(i), "deger": float(sizes[i])})
-    # aralık: en yakın komşu (kenar-kenar). O(n^2) küçük yerleşimler için; büyükte KDTree önerilir.
+        viol.append({"type": "min_feature", "i": int(i), "value": float(sizes[i])})
+    # gap: nearest neighbor (edge-to-edge). O(n^2) for small layouts; a KDTree is recommended for large ones.
     n = len(placements); worst = np.inf; gv = 0
     if n <= 4000:
         for i in range(n):
@@ -65,7 +65,7 @@ def drc_check(placements, min_feature=0.05, min_gap=0.04, shape_key="params"):
             if gap < min_gap:
                 gv += 1
                 if len(viol) < 50:
-                    viol.append({"tip": "min_gap", "i": int(i), "j": j, "gap": round(float(gap), 4)})
+                    viol.append({"type": "min_gap", "i": int(i), "j": j, "gap": round(float(gap), 4)})
     return {"ok": len(fv) == 0 and gv == 0, "n_feature_viol": int(len(fv)),
             "n_gap_viol": int(gv), "worst_gap": float(worst if np.isfinite(worst) else -1),
             "violations": viol}

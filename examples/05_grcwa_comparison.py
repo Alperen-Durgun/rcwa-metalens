@@ -1,14 +1,14 @@
-"""Örnek 5 — Bağımsız doğrulama: rcwa_py vs grcwa.
-Senin kodunun sonuçlarını, hakemli/açık kaynak bir RCWA çözücüsü olan
-grcwa (Fan grubu, Stanford) ile yan yana karşılaştırır. İki bağımsız kod
-aynı sayıyı veriyorsa doğruluk bağımsız olarak kanıtlanmış olur.
+"""Example 5 — Independent validation: rcwa_py vs grcwa.
+Compares this code's results side by side with grcwa (Fan group, Stanford),
+a peer-reviewed open-source RCWA solver. If two independent codes give the
+same number, the accuracy is independently established.
 
-Kurulum (bir kez):  pip install grcwa autograd
-Çalıştır:           python examples/05_grcwa_karsilastirma.py
+Install (once):  pip install grcwa autograd
+Run:             python examples/05_grcwa_comparison.py
 
-Not: grcwa 2B periyodik bir çözücü. 1B grating'i taklit etmek için y ekseninde
-subwavelength (kırınımsız) bir periyot kullanılır. Kalan ~1e-4 fark, grcwa'nın
-deseni gerçek-uzay gridinde örneklemesinden kaynaklanır (ayrıklaştırma).
+Note: grcwa is a 2D-periodic solver. To mimic a 1D grating, a subwavelength
+(non-diffracting) period is used along y. The remaining ~1e-4 difference comes
+from grcwa sampling the pattern on a real-space grid (discretization).
 """
 import numpy as np, sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -18,9 +18,9 @@ try:
     import grcwa
     grcwa.set_backend('numpy')
 except ImportError:
-    print("grcwa kurulu değil. Kur:  pip install grcwa autograd"); sys.exit(1)
+    print("grcwa is not installed. Install:  pip install grcwa autograd"); sys.exit(1)
 
-# --- ortak problem ---
+# --- shared problem ---
 lam0, period, theta, d = 0.55, 1.2, 15.0, 0.30
 er_ref, er_trn, eps_hi, eps_lo, duty = 1.0, 2.25, 4.0, 1.0, 0.5
 
@@ -53,7 +53,7 @@ def ref(spol):
 
 
 if __name__ == "__main__":
-    print("=== rcwa_py  vs  grcwa (bağımsız referans), θ=15° binary grating ===\n")
+    print("=== rcwa_py  vs  grcwa (independent reference), θ=15° binary grating ===\n")
     ok = True
     for name, pol, spol in [("TE / s-pol", (0., 1.), True), ("TM / p-pol", (1., 0.), False)]:
         Rm, Tm = mine(pol); Rr, Tr = ref(spol)
@@ -63,5 +63,5 @@ if __name__ == "__main__":
         print(f"{'':18s}{'Rtot':>10s}{'Ttot':>10s}")
         print(f"{'rcwa_py':18s}{Rm:>10.5f}{Tm:>10.5f}")
         print(f"{'grcwa':18s}{Rr:>10.5f}{Tr:>10.5f}")
-        print(f"{'|fark|':18s}{dR:>10.2e}{dT:>10.2e}\n")
-    print("SONUÇ:", "✅ Bağımsız doğrulama başarılı (fark < 2e-3)" if ok else "⚠️ Fark büyük, incele")
+        print(f"{'|diff|':18s}{dR:>10.2e}{dT:>10.2e}\n")
+    print("RESULT:", "✅ Independent validation successful (difference < 2e-3)" if ok else "⚠️ Large difference, investigate")

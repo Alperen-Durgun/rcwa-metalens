@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 if not exist ".venv\Scripts\activate.bat" (
-  echo [Kurulum] Sanal ortam olusturuluyor...
+  echo [Setup] Creating virtual environment...
   python -m venv .venv
   call ".venv\Scripts\activate.bat"
   python -m pip install --upgrade pip
@@ -11,6 +11,6 @@ if not exist ".venv\Scripts\activate.bat" (
   call ".venv\Scripts\activate.bat"
 )
 echo.
-echo RCWA calisma ortami hazir. Klasor aciliyor...
+echo RCWA environment ready. Opening folder...
 start "" explorer "%~dp0"
 cmd /k

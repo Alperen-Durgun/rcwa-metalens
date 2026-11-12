@@ -1,6 +1,6 @@
-"""Örnek 1 — Doğrulama: Homojen film RCWA sonucu analitik Fresnel'e eşit mi?
-Çalıştır:  python examples/01_slab_validation.py
-Beklenen: ΔR ~ 1e-16 (makine hassasiyeti), ΣDE = 1.
+"""Example 1 — Validation: does the RCWA result for a homogeneous film equal analytic Fresnel?
+Run:  python examples/01_slab_validation.py
+Expected: ΔR ~ 1e-16 (machine precision), ΣDE = 1.
 """
 import numpy as np, sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

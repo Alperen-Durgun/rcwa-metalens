@@ -1,6 +1,6 @@
-"""Tam 1D RCWA çözücü — Ders 06 & Kod Dersi 04.
-Bütün adımları birleştirir: k-vektörleri -> katman özmodları -> S-matris ->
-Redheffer star -> yansıma/geçiş genlikleri -> kırınım verimleri.
+"""Full 1D RCWA solver — Lesson 06 & Coding Lesson 04.
+Combines all steps: k-vectors -> layer eigenmodes -> S-matrix ->
+Redheffer star -> reflection/transmission amplitudes -> diffraction efficiencies.
 """
 import numpy as np
 from .layer import homogeneous_modes, grating_modes, layer_smatrix
@@ -8,12 +8,13 @@ from .redheffer import redheffer_star
 
 
 def solve_rcwa_1d(lam0, theta_deg, er_ref, er_trn, period, layers, P,
-                  pol=(0.0, 1.0), phi_deg=0.0):
-    """Planar (1D) RCWA çöz.
+                  pol=(0.0, 1.0), phi_deg=0.0, rule="inverse"):
+    """Solve planar (1D) RCWA.
 
-    layers : [(eps_x, kalinlik), ...]  her katman bir periyot boyunca örneklenmiş eps(x)
-    pol    : (TM_bileşeni, TE_bileşeni)   TE = y ekseni boyunca (düzleme dik) E
-    Döndürür: R, T (mertebe başına verim), toplamlar, sıfırıncı mertebe genliği.
+    layers : [(eps_x, thickness), ...]  each layer is eps(x) sampled over one period
+    pol    : (TM_component, TE_component)   TE = E along the y axis (out of plane)
+    rule   : "inverse" (Li factorization, fast TM convergence; default) or "laurent"
+    Returns: R, T (per-order efficiency), totals, zeroth-order amplitude.
     """
     k0 = 2 * np.pi / lam0
     n_ref = np.sqrt(er_ref)
@@ -27,38 +28,42 @@ def solve_rcwa_1d(lam0, theta_deg, er_ref, er_trn, period, layers, P,
     KX = np.diag(kx.astype(complex))
     KY = ky_inc * np.eye(P, dtype=complex)
 
-    # gap medium (serbest uzay) — tüm katmanlar buna göre bağlanır
+    # gap medium (free space) — all layers are connected relative to this
     Wg, Vg, _ = homogeneous_modes(KX, KY, 1.0, 1.0)
+    Vgi = np.linalg.inv(Vg)
+    WgiW = lambda Wm: Wm                      # the gap modes are W = I, so inv(Wg) @ W = W
 
-    # global S: başlangıçta 'bağlantısız' (birim) matris
+    # global S: initially the 'disconnected' (identity) matrix
     Z = np.zeros((2 * P, 2 * P), dtype=complex)
     Ipq = np.eye(2 * P, dtype=complex)
-    Sg = (Z.copy(), Ipq.copy(), Ipq.copy(), Z.copy())
+    Sg = None                                 # None = identity (no device layer yet)
 
-    # cihaz katmanları
+    # device layers
     for eps_x, d in layers:
-        W, V, lam = grating_modes(np.asarray(eps_x, dtype=complex), KX, KY, P)
+        W, V, lam = grating_modes(np.asarray(eps_x, dtype=complex), KX, KY, P, rule=rule)
         Sl = layer_smatrix(W, V, lam, k0, d, Wg, Vg)
-        Sg = redheffer_star(Sg, Sl)
+        Sg = Sl if Sg is None else redheffer_star(Sg, Sl)
+    if Sg is None:
+        Sg = (Z.copy(), Ipq.copy(), Ipq.copy(), Z.copy())
 
-    # yansıma tarafı
+    # reflection side
     Wref, Vref, KZref = homogeneous_modes(KX, KY, er_ref, 1.0)
-    Aref = np.linalg.inv(Wg) @ Wref + np.linalg.inv(Vg) @ Vref
-    Bref = np.linalg.inv(Wg) @ Wref - np.linalg.inv(Vg) @ Vref
+    Aref = WgiW(Wref) + Vgi @ Vref
+    Bref = WgiW(Wref) - Vgi @ Vref
     Ai = np.linalg.inv(Aref)
     Sref = (-Ai @ Bref, 2 * Ai, 0.5 * (Aref - Bref @ Ai @ Bref), Bref @ Ai)
 
-    # geçiş tarafı
+    # transmission side
     Wtrn, Vtrn, KZtrn = homogeneous_modes(KX, KY, er_trn, 1.0)
-    Atrn = np.linalg.inv(Wg) @ Wtrn + np.linalg.inv(Vg) @ Vtrn
-    Btrn = np.linalg.inv(Wg) @ Wtrn - np.linalg.inv(Vg) @ Vtrn
+    Atrn = WgiW(Wtrn) + Vgi @ Vtrn
+    Btrn = WgiW(Wtrn) - Vgi @ Vtrn
     Ti = np.linalg.inv(Atrn)
     Strn = (Btrn @ Ti, 0.5 * (Atrn - Btrn @ Ti @ Btrn), 2 * Ti, -Ti @ Btrn)
 
-    # global bağlantı: yansıma * cihaz * geçiş
+    # global connection: reflection * device * transmission
     S11, S12, S21, S22 = redheffer_star(redheffer_star(Sref, Sg), Strn)
 
-    # kaynak (sıfırıncı mertebede birim genlik)
+    # source (unit amplitude in the zeroth order)
     delta = np.zeros(P, dtype=complex); delta[M] = 1.0
     p_tm, s_te = pol
     if np.isclose(theta, 0.0):
@@ -70,19 +75,20 @@ def solve_rcwa_1d(lam0, theta_deg, er_ref, er_trn, period, layers, P,
         atm = np.cross(ate, khat); atm /= np.linalg.norm(atm)
     Ppol = p_tm * atm + s_te * ate
     esrc = np.concatenate([Ppol[0] * delta, Ppol[1] * delta])
-    csrc = np.linalg.inv(Wref) @ esrc
+    csrc = np.linalg.solve(Wref, esrc)
 
     cref = S11 @ csrc
     ctrn = S21 @ csrc
     rt = Wref @ cref; tt = Wtrn @ ctrn
     rx, ry = rt[:P], rt[P:]
     tx, ty = tt[:P], tt[P:]
-    rz = -np.linalg.inv(KZref) @ (KX @ rx + KY @ ry)
-    tz = -np.linalg.inv(KZtrn) @ (KX @ tx + KY @ ty)
+    kxv, kyv = np.diag(KX), np.diag(KY)
+    rz = -(kxv * rx + kyv * ry) / np.diag(KZref)
+    tz = -(kxv * tx + kyv * ty) / np.diag(KZtrn)
 
     R = (np.abs(rx) ** 2 + np.abs(ry) ** 2 + np.abs(rz) ** 2) * np.real(np.diag(KZref) / kz_inc)
     T = (np.abs(tx) ** 2 + np.abs(ty) ** 2 + np.abs(tz) ** 2) * np.real(np.diag(KZtrn) / kz_inc)
 
     return dict(orders=p, R=np.real(R), T=np.real(T),
                 Rtot=float(np.real(R.sum())), Ttot=float(np.real(T.sum())),
-                zeroth_index=M, tx=tx, ty=ty, rx=rx, ry=ry)
+                zeroth_index=M, i0=M, tx=tx, ty=ty, rx=rx, ry=ry)

@@ -1,12 +1,12 @@
-"""E5/E6 — ENTEGRE 3B KÖPRÜ İŞ AKIŞI + KUTUCUKLAMA + ZEMAX DEVRİ.
+"""E5/E6 — INTEGRATED 3D BRIDGE WORKFLOW + TILING + ZEMAX HAND-OFF.
 
-- estimate_and_run(design): fullwave.build_tidy3d ile sim kur -> maliyet TAHMİN et ->
-  (run=True ise) gönder/bekle/getir -> odak metriklerini döndür. Tek çağrıda uçtan uca.
-  (Bulut kısmı tidy3d + API anahtarı gerektirir; anahtarsız yalnız tahmin.)
-- tile_design(design, tile_um): büyük lens yerleşimini kutucuklara böler (kutucuk-FDTD
-  veya bellek için).
-- zemax_phase_csv(design): metalens ideal faz profilini φ(r) Zemax'a devir için CSV yazar
-  (Grid Phase / makro import). Sistem-ölçek ışın-optiğine köprü.
+- estimate_and_run(design): build the sim with fullwave.build_tidy3d -> ESTIMATE the cost ->
+  (if run=True) submit/wait/fetch -> return focal metrics. End to end in a single call.
+  (The cloud part requires tidy3d + an API key; without a key, estimate only.)
+- tile_design(design, tile_um): splits a large lens layout into tiles (for tile-FDTD
+  or memory).
+- zemax_phase_csv(design): writes the ideal metalens phase profile φ(r) to CSV for hand-off
+  to Zemax (Grid Phase / macro import). Bridge to system-scale ray optics.
 """
 import os
 import numpy as np
@@ -14,9 +14,9 @@ import numpy as np
 
 def estimate_and_run(design, run=False, add_xz_monitor=True, run_time=2.0e-13,
                      min_steps_per_wvl=15, task_name="metalens_pipeline", hdf5="pipeline_data.hdf5"):
-    """3B Tidy3D iş akışı. run=False -> yalnız maliyet tahmini (ücretsiz).
-    run=True -> gönder/bekle/getir (kredi harcar) + odak analizi.
-    Döndürür: {estimate, ...(+run ise) focus_um, fwhm_nm, real_cost}."""
+    """3D Tidy3D workflow. run=False -> cost estimate only (free).
+    run=True -> submit/wait/fetch (spends credits) + focus analysis.
+    Returns: {estimate, ...(+ if run) focus_um, fwhm_nm, real_cost}."""
     from . import fullwave
     import tidy3d as td
     from tidy3d import web
@@ -25,7 +25,7 @@ def estimate_and_run(design, run=False, add_xz_monitor=True, run_time=2.0e-13,
     job = web.Job(simulation=sim, task_name=task_name)
     out = {"estimate": float(job.estimate_cost()), "size_um": tuple(round(s, 2) for s in sim.size)}
     if not run:
-        out["note"] = "Yalnız tahmin. run=True ile çalıştır (kredi harcar)."
+        out["note"] = "Estimate only. Run with run=True (spends credits)."
         return out
     data = job.run(path=hdf5)
     out.update(analyze_focus_data(data, design))
@@ -37,7 +37,7 @@ def estimate_and_run(design, run=False, add_xz_monitor=True, run_time=2.0e-13,
 
 
 def analyze_focus_data(data, design):
-    """xz-monitörden gerçek odağı (yakın-alanı dışlayarak) çıkar. examples/16b ile aynı mantık."""
+    """Extract the true focus from the xz monitor (excluding the near field). Same logic as examples/16b."""
     f = design["f"]
     xz = data["xz"]
     I = (np.abs(np.asarray(xz.Ex.values).squeeze()) ** 2 +
@@ -57,8 +57,8 @@ def analyze_focus_data(data, design):
 
 
 def tile_design(design, tile_um):
-    """Büyük lens yerleşimini kare kutucuklara böl (kutucuk-FDTD/bellek için).
-    Döndürür: list[design], her biri aynı meta + o kutucuğun placements'i."""
+    """Split a large lens layout into square tiles (for tile-FDTD/memory).
+    Returns: list[design], each with the same metadata + that tile's placements."""
     pl = design["placements"]
     xs = np.array([p["x"] for p in pl]); ys = np.array([p["y"] for p in pl])
     x0, y0 = xs.min(), ys.min()
@@ -75,14 +75,14 @@ def tile_design(design, tile_um):
 
 
 def zemax_phase_csv(design, csv_path, n_samples=256):
-    """Metalens ideal faz profili φ(r) = -(2π/λ)(√(r²+f²)-f) — Zemax'a devir için CSV.
-    Zemax 'Grid Phase' yüzeyi / makro ile radyal faz olarak içe alınır (sistem-ölçek ışın izleme)."""
+    """Ideal metalens phase profile φ(r) = -(2π/λ)(√(r²+f²)-f) — CSV for hand-off to Zemax.
+    Imported as radial phase via a Zemax 'Grid Phase' surface / macro (system-scale ray tracing)."""
     lam = design["lam0"]; f = design["f"]; D = design["D_lens"]
     r = np.linspace(0, D / 2, n_samples)
-    phi = -(2 * np.pi / lam) * (np.sqrt(r ** 2 + f ** 2) - f)     # radyan
+    phi = -(2 * np.pi / lam) * (np.sqrt(r ** 2 + f ** 2) - f)     # radians
     phi_wrapped = np.mod(phi, 2 * np.pi)
     with open(csv_path, "w", encoding="utf-8") as fh:
-        fh.write("# Zemax Grid Phase devri — metalens radyal faz\n")
+        fh.write("# Zemax Grid Phase hand-off — metalens radial phase\n")
         fh.write(f"# lam_um={lam}, f_um={f}, D_um={D}, NA={np.sin(np.arctan(D/2/f)):.4f}\n")
         fh.write("r_um,phase_rad,phase_wrapped_rad,phase_waves\n")
         for i in range(n_samples):

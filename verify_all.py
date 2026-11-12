@@ -1,65 +1,65 @@
-"""KAPSAMLI DOĞRULAMA KOŞUMU — tek komut.
-Birim testler + metrik fonksiyonları + 19 otomasyon üreteci + faz-konvansiyon özeti.
-Terminale geçti/kaldı tablosu yazar; --report ile kasaya Markdown rapor üretir.
+"""COMPREHENSIVE VERIFICATION RUN — a single command.
+Unit tests + metric functions + all automation generators + phase-convention summary.
+Prints a pass/fail table to the terminal; with --report also writes a Markdown report to the vault.
 
-Kullanım (.venv, rcwa_py klasöründen):
-  python verify_all.py            # hepsini çalıştır, terminal tablosu
-  python verify_all.py --report   # + kasaya Raporlar/ altına .md rapor
+Usage (inside the .venv, from the repository root):
+  python verify_all.py            # run everything, terminal table
+  python verify_all.py --report   # + .md report under Raporlar/ in the vault
 """
 import os, sys, io, time, traceback
 import numpy as np
 import matplotlib; matplotlib.use("Agg")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-OK, FAIL = "GEÇTİ", "KALDI"
-rows = []   # (kategori, ad, durum, detay)
+OK, FAIL = "PASSED", "FAILED"
+rows = []   # (category, name, status, detail)
 def rec(cat, name, ok, detail=""):
     rows.append((cat, name, OK if ok else FAIL, detail))
     tag = "  ✅" if ok else "  ❌"
     print(f"{tag} [{cat}] {name}" + (f" — {detail}" if detail else ""))
 
-# ---------------- 1) BİRİM TESTLER ----------------
-print("\n=== 1) BİRİM TESTLER (tests/test_rcwa.py) ===")
+# ---------------- 1) UNIT TESTS ----------------
+print("\n=== 1) UNIT TESTS (tests/test_rcwa.py) ===")
 import importlib.util as _ilu
 _tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests", "test_rcwa.py")
 _spec = _ilu.spec_from_file_location("_our_test_rcwa", _tp)
-T = _ilu.module_from_spec(_spec); _spec.loader.exec_module(T)   # doğru dosyayı yolundan yükle
+T = _ilu.module_from_spec(_spec); _spec.loader.exec_module(T)   # load the right file by its path
 unit = [n for n in dir(T) if n.startswith("test_")]
 for name in unit:
     try:
-        getattr(T, name)(); rec("birim", name, True)
+        getattr(T, name)(); rec("unit", name, True)
     except Exception as e:
-        rec("birim", name, False, f"{type(e).__name__}: {e}")
+        rec("unit", name, False, f"{type(e).__name__}: {e}")
 
-# ---------------- 2) METRİKLER (bilinen girdi) ----------------
-print("\n=== 2) METRİKLER (analitik/bilinen girdi) ===")
+# ---------------- 2) METRICS (known input) ----------------
+print("\n=== 2) METRICS (analytic/known input) ===")
 from rcwa import metrics
-# fwhm_1d: Gauss -> FWHM = 2.3548 sigma
+# fwhm_1d: Gaussian -> FWHM = 2.3548 sigma
 x = np.linspace(-6, 6, 2001); sig = 1.0; g = np.exp(-x**2/(2*sig**2))
 fw = metrics.fwhm_1d(g, x)
-rec("metrik", "fwhm_1d (Gauss=2.355σ)", abs(fw - 2.3548*sig) < 0.02, f"FWHM={fw:.3f}")
-# focal_metrics: 2B Gauss
+rec("metric", "fwhm_1d (Gaussian=2.355σ)", abs(fw - 2.3548*sig) < 0.02, f"FWHM={fw:.3f}")
+# focal_metrics: 2D Gaussian
 xc = (np.arange(128)-64)*0.05; X, Y = np.meshgrid(xc, xc, indexing="ij")
 I2 = np.exp(-(X**2+Y**2)/(2*0.3**2)); fm2 = metrics.focal_metrics(I2, xc)
-rec("metrik", "focal_metrics (fwhm_x≈0.71)", abs(fm2["fwhm_x"]-2.3548*0.3) < 0.03, f"fwhm_x={fm2['fwhm_x']:.3f}")
-# focusing_efficiency: dar leke -> yüksek
+rec("metric", "focal_metrics (fwhm_x≈0.71)", abs(fm2["fwhm_x"]-2.3548*0.3) < 0.03, f"fwhm_x={fm2['fwhm_x']:.3f}")
+# focusing_efficiency: narrow spot -> high
 eff = metrics.focusing_efficiency(I2, xc, fm2["fwhm_x"])
-rec("metrik", "focusing_efficiency (dar leke>0.7)", eff > 0.7, f"eff={eff:.2f}")
-# strehl: aynı=1, geniş<1
-rec("metrik", "strehl (aynı=1.0)", abs(metrics.strehl(I2, I2)-1.0) < 1e-9, "1.000")
+rec("metric", "focusing_efficiency (narrow spot>0.7)", eff > 0.7, f"eff={eff:.2f}")
+# strehl: identical=1, broad<1
+rec("metric", "strehl (identical=1.0)", abs(metrics.strehl(I2, I2)-1.0) < 1e-9, "1.000")
 Ibroad = np.exp(-(X**2+Y**2)/(2*0.5**2))
-rec("metrik", "strehl (geniş<1)", metrics.strehl(Ibroad, I2) < 1.0, f"St={metrics.strehl(Ibroad,I2):.2f}")
-# mtf_1d: DC=1, tepe merkezde
+rec("metric", "strehl (broad<1)", metrics.strehl(Ibroad, I2) < 1.0, f"St={metrics.strehl(Ibroad,I2):.2f}")
+# mtf_1d: DC=1, peak at center
 mt = metrics.mtf_1d(g); c = len(mt)//2
-rec("metrik", "mtf_1d (DC=1, tepe merkez)", abs(mt[c]-1.0) < 1e-9 and mt[0] < mt[c], f"mtf[0]={mt[0]:.2e}")
-# angular_spectrum: düzlem dalga -> |E| korunur
+rec("metric", "mtf_1d (DC=1, peak at center)", abs(mt[c]-1.0) < 1e-9 and mt[0] < mt[c], f"mtf[0]={mt[0]:.2e}")
+# angular_spectrum: plane wave -> |E| is preserved
 E0 = np.ones((128,128), complex); prop = metrics.angular_spectrum(E0, 0.05, 0.633, 3.0)
-rec("metrik", "angular_spectrum (düzlem dalga |E|=1)", abs(np.mean(np.abs(prop))-1.0) < 1e-3, f"<|E|>={np.mean(np.abs(prop)):.4f}")
+rec("metric", "angular_spectrum (plane wave |E|=1)", abs(np.mean(np.abs(prop))-1.0) < 1e-3, f"<|E|>={np.mean(np.abs(prop)):.4f}")
 
-# ---------------- 3) OTOMASYON ÜRETEÇLERİ (smoke) ----------------
-print("\n=== 3) OTOMASYON ÜRETEÇLERİ (uçtan uca smoke) ===")
+# ---------------- 3) AUTOMATION GENERATORS (smoke) ----------------
+print("\n=== 3) AUTOMATION GENERATORS (end-to-end smoke) ===")
 import run_experiment as R
-# küçük/hızlı parametre override'ları
+# small/fast parameter overrides
 OV = {
     "grating": {}, "metalens_library": {"n_width": 8}, "angle_sweep": {"n_angle": 9},
     "grating2d": {}, "metalens_pillar_2d": {"n_side": 6},
@@ -82,37 +82,36 @@ for name, runner in R.RUNNERS.items():
     try:
         fig, body, summ = runner(dict(fm), "TEST_" + name)
         ok = isinstance(summ, str) and os.path.exists(fig)
-        rec("üreteç", name, ok, f"{summ}  [{time.time()-t0:.1f}s]")
+        rec("generator", name, ok, f"{summ}  [{time.time()-t0:.1f}s]")
     except Exception as e:
-        rec("üreteç", name, False, f"{type(e).__name__}: {e}")
+        rec("generator", name, False, f"{type(e).__name__}: {e}")
 
-# ---------------- 4) FAZ-KONVANSİYON ÖZETİ ----------------
-print("\n=== 4) FAZ-KONVANSİYON DENETİMİ (özet) ===")
+# ---------------- 4) PHASE-CONVENTION SUMMARY ----------------
+print("\n=== 4) PHASE-CONVENTION CHECK (summary) ===")
 conv = [
-    ("metalens_design_full (2B)", True, "eşitlendi — FDTD ile difraksiyon-sınırlı odak doğrulandı"),
-    ("metalens_layout_2d (2B)", True, "eşitlendi — aynı 2B çözücü deseni"),
-    ("lens_fullwave_1d (1B)", True, "eşitleme YOK — süper-hücre RCWA ΣDE=1.0, odak≈f (doğru)"),
-    ("achromatic_analysis (1B)", True, "eşitleme YOK — 1B çözücü konvansiyonu doğru"),
-    ("vorteks/hologram/polmux", True, "analitik faz maskesi — RCWA eşleme yok, etkilenmez"),
-    ("deflektör/tolerans", True, "RCWA verimini doğrudan optimize — etkilenmez"),
+    ("metalens_design_full (2D)", True, "conjugated — diffraction-limited focus verified with FDTD"),
+    ("metalens_layout_2d (2D)", True, "conjugated — same 2D solver pattern"),
+    ("lens_fullwave_1d (1D)", True, "NO conjugation — super-cell RCWA ΣDE=1.0, focus≈f (correct)"),
+    ("achromatic_analysis (1D)", True, "NO conjugation — the 1D solver convention is correct"),
+    ("vortex/hologram/polmux", True, "analytic phase mask — no RCWA mapping, unaffected"),
+    ("deflector/tolerance", True, "optimizes the RCWA efficiency directly — unaffected"),
 ]
 for name, ok, note in conv:
-    rec("konvansiyon", name, ok, note)
+    rec("convention", name, ok, note)
 
-# ---------------- ÖZET ----------------
+# ---------------- SUMMARY ----------------
 n_ok = sum(1 for r in rows if r[2] == OK); n_all = len(rows)
 print("\n" + "="*66)
-print(f"ÖZET: {n_ok}/{n_all} GEÇTİ" + ("  ✅ HEPSİ GEÇTİ" if n_ok == n_all else f"  ❌ {n_all-n_ok} KALDI"))
+print(f"SUMMARY: {n_ok}/{n_all} PASSED" + ("  ✅ ALL PASSED" if n_ok == n_all else f"  ❌ {n_all-n_ok} FAILED"))
 print("="*66)
 
-# ---------------- OPSİYONEL: KASAYA RAPOR ----------------
+# ---------------- OPTIONAL: REPORT TO THE VAULT ----------------
 if "--report" in sys.argv:
     from datetime import date
-    SIM_up = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # ...1_RCWA_Metalens_Projesi
-    rep_dir = os.path.join(SIM_up, "Raporlar")
+    rep_dir = R.RAPORLAR                      # same project root as run_experiment
     os.makedirs(rep_dir, exist_ok=True)
     d = date.today().strftime("%d-%m-%Y")
-    cats = ["birim", "metrik", "üreteç", "konvansiyon"]
+    cats = ["unit", "metric", "generator", "convention"]
     lines = [f"""---
 id: kapsamlidogrulama
 olusturulma: {d}
@@ -125,28 +124,28 @@ etiketler:
 ilgili_proje_veya_alan: "[[🎯 RCWA Metalens Projesi]]"
 ---
 
-# 🧪 Kapsamlı Doğrulama Raporu
+# 🧪 Comprehensive Verification Report
 
 ⬅️ [[🎯 RCWA Metalens Projesi]]
 
-> Tek komutla ({'`python verify_all.py --report`'}) çalışan uçtan uca doğrulama: birim testler + metrikler + 19 üreteç + faz-konvansiyon denetimi.
+> End-to-end verification run with a single command ({'`python verify_all.py --report`'}): unit tests + metrics + all generators + phase-convention check.
 
-**ÖZET: {n_ok}/{n_all} GEÇTİ** {'✅ Hepsi geçti.' if n_ok==n_all else f'❌ {n_all-n_ok} kaldı — aşağıda.'}
+**SUMMARY: {n_ok}/{n_all} PASSED** {'✅ All passed.' if n_ok==n_all else f'❌ {n_all-n_ok} failed — see below.'}
 """]
     for cat in cats:
         crows = [r for r in rows if r[0] == cat]
         cok = sum(1 for r in crows if r[2] == OK)
-        titlemap = {"birim": "1) Birim testler", "metrik": "2) Metrikler",
-                    "üreteç": f"3) Otomasyon üreteçleri ({len([r for r in rows if r[0]=='üreteç'])})", "konvansiyon": "4) Faz-konvansiyon denetimi"}
+        titlemap = {"unit": "1) Unit tests", "metric": "2) Metrics",
+                    "generator": f"3) Automation generators ({len([r for r in rows if r[0]=='generator'])})", "convention": "4) Phase-convention check"}
         lines.append(f"\n## {titlemap[cat]} — {cok}/{len(crows)}\n")
-        lines.append("| Durum | Ad | Detay |")
+        lines.append("| Status | Name | Detail |")
         lines.append("|---|---|---|")
         for _, name, st, det in crows:
             em = "✅" if st == OK else "❌"
             lines.append(f"| {em} | {name} | {det} |")
-    lines.append(f"\n---\n*Flora Status: {'🟢' if n_ok==n_all else '🟡'} Kapsamlı doğrulama {n_ok}/{n_all}. Tekrar: `python verify_all.py --report`.*\n")
-    rp = os.path.join(rep_dir, "🧪 Kapsamlı Doğrulama Raporu.md")
+    lines.append(f"\n---\n*Flora Status: {'🟢' if n_ok==n_all else '🟡'} Comprehensive verification {n_ok}/{n_all}. Re-run: `python verify_all.py --report`.*\n")
+    rp = os.path.join(rep_dir, "🧪 Comprehensive Verification Report.md")
     open(rp, "w", encoding="utf-8").write("\n".join(lines))
-    print(f"\nKasaya rapor yazıldı: Raporlar/🧪 Kapsamlı Doğrulama Raporu.md")
+    print(f"\nReport written to the vault: Raporlar/🧪 Comprehensive Verification Report.md")
 
 sys.exit(0 if n_ok == n_all else 1)

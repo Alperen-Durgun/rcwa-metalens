@@ -1,5 +1,5 @@
-"""Öğretici RCWA kütüphanesi — 1B ve 2B (TE + TM).
-1B/2B çözücü, kararlı otomatik çözücü, dispersif malzeme, önbellek.
+"""Educational RCWA library — 1D and 2D (TE + TM).
+1D/2D solver, stable automatic solver, dispersive materials, cache.
 """
 from .convmat import convmat1d, convmat2d
 from .redheffer import redheffer_star
@@ -14,10 +14,13 @@ from . import metrics
 from . import shapes
 from . import gds
 from . import fullwave
+from . import convention
+from .convention import to_physical, physical_phase
 from .parallel import parallel_map
 
 __all__ = ["convmat1d", "convmat2d", "redheffer_star", "homogeneous_modes",
            "grating_modes", "modes_from_ER", "layer_smatrix",
            "solve_rcwa_1d", "solve_rcwa_2d", "solve_1d_auto", "solve_2d_auto", "solve_scalar_1d",
-           "materials", "cache", "metrics", "shapes", "gds", "fullwave", "modes_from_ER_cached", "parallel_map"]
-__version__ = "0.7.0"
+           "materials", "cache", "metrics", "shapes", "gds", "fullwave", "modes_from_ER_cached", "parallel_map",
+           "convention", "to_physical", "physical_phase"]
+__version__ = "0.2.0.dev0"

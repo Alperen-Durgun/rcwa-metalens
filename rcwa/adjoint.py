@@ -1,14 +1,14 @@
-"""E1 — ADJOINT / AUTODIFF TERS TASARIM (türevlenebilir RCWA).
+"""E1 — ADJOINT / AUTODIFF INVERSE DESIGN (differentiable RCWA).
 
-Modern ters tasarımın standardı: hedef fonksiyonun tüm tasarım parametrelerine
-gradyanını, adjoint (otomatik türev) ile ~tek çözümde hesaplayıp gradyan-tabanlı
-optimize etmek. Burada doğrulanmış `grcwa` motoru autograd backend'iyle kullanılır;
-gradyan sonlu-fark ile bire bir örtüşür (test_adjoint).
+The standard of modern inverse design: compute the gradient of the objective with
+respect to all design parameters in ~a single solve via the adjoint method (automatic
+differentiation), then optimize with gradients. Here the verified `grcwa` engine is used
+with its autograd backend; the gradient matches finite differences one-to-one (test_adjoint).
 
-Aynı çerçeve deflektör, ışın-ayırıcı, absorber, metalens-hücresi vb. her
-grcwa-ifade-edilebilir hedefe uygulanır. GPU için bkz. backends.py (torch/jax).
+The same framework applies to any objective expressible in grcwa: deflector, beam
+splitter, absorber, metalens cell, etc. For GPU see backends.py (torch/jax).
 
-Bağımlılık: grcwa, autograd (ikisi de kurulu).
+Dependencies: grcwa, autograd.
 """
 import numpy as _np
 
@@ -20,7 +20,7 @@ def _agnp(prefer_gpu=True):
         bk, _gpu = pick_grcwa_backend(prefer_gpu=prefer_gpu)
     except Exception:
         bk = "autograd"
-    grcwa.set_backend(bk)   # 'jax' (GPU+autodiff) varsa onu, yoksa 'autograd' (CPU)
+    grcwa.set_backend(bk)   # use 'jax' (GPU+autodiff) if available, otherwise 'autograd' (CPU)
     if bk == "jax":
         import jax.numpy as anp
     else:
@@ -29,9 +29,10 @@ def _agnp(prefer_gpu=True):
 
 
 def rcwa_TR(dof, cfg, anp=None):
-    """Desenli tek katman için (R, T) döndürür — türevlenebilir.
-    dof: [0,1] yoğunluk (Nx*Ny), eps = eps_lo + dof*(eps_hi-eps_lo).
-    cfg: {nG, Lx, Ly, Nx, Ny, lam, thick, eps_hi, eps_lo, eps_sup, eps_sub, theta, phi}"""
+    """Returns (R, T) for a single patterned layer — differentiable.
+    dof: [0,1] density (Nx*Ny), eps = eps_lo + dof*(eps_hi-eps_lo).
+    cfg: {nG, Lx, Ly, Nx, Ny, lam, thick, eps_hi, eps_lo, eps_sup, eps_sub, theta, phi}
+    (theta, phi in RADIANS — passed straight to grcwa)."""
     import grcwa
     if anp is None:
         anp = _agnp()
@@ -49,14 +50,14 @@ def rcwa_TR(dof, cfg, anp=None):
 
 
 def absorption(dof, cfg, anp=None):
-    """Absorpsiyon A = 1 - R - T (kayıplı eps_hi ile). Türevlenebilir hedef."""
+    """Absorption A = 1 - R - T (with lossy eps_hi). Differentiable objective."""
     R, T = rcwa_TR(dof, cfg, anp)
     return 1.0 - R - T
 
 
 def adam(fun, x0, steps=60, lr=0.05, maximize=True, clip=(0.0, 1.0), seed=0):
-    """Basit Adam optimizeri (autograd.grad ile). fun: skaler hedef.
-    Döndürür: (x_final, history[list]). clip ile [0,1] projeksiyonu."""
+    """Simple Adam optimizer (via autograd.grad). fun: scalar objective.
+    Returns: (x_final, history[list]). clip projects onto [0,1]."""
     from autograd import grad
     g = grad(fun)
     x = _np.array(x0, float)
@@ -78,8 +79,8 @@ def adam(fun, x0, steps=60, lr=0.05, maximize=True, clip=(0.0, 1.0), seed=0):
 
 
 def optimize_absorber(cfg, steps=60, lr=0.05, seed=0):
-    """Serbest-biçim metasurface absorber topoloji optimizasyonu (adjoint).
-    Döndürür: {pattern(Nx,Ny), A0, A_final, history}."""
+    """Free-form metasurface absorber topology optimization (adjoint).
+    Returns: {pattern(Nx,Ny), A0, A_final, history}."""
     anp = _agnp()
     rng = _np.random.default_rng(seed)
     x0 = rng.uniform(0.35, 0.65, cfg["Nx"] * cfg["Ny"])
@@ -91,7 +92,7 @@ def optimize_absorber(cfg, steps=60, lr=0.05, seed=0):
 
 
 def fd_grad_check(cfg, seed=1, h=1e-4):
-    """Gradyan doğrulaması: adjoint vs sonlu-fark (tek DOF). test için."""
+    """Gradient check: adjoint vs finite difference (single DOF). For tests."""
     from autograd import grad
     anp = _agnp()
     rng = _np.random.default_rng(seed)

@@ -7,21 +7,25 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+.cache/
+workspace/
 .ipynb_checkpoints/
 
-# --- Sanal ortam (repoya girmez) ---
+# --- Virtual environment (never committed) ---
 .venv/
 venv/
 env/
 
-# --- Üretilen çıktılar / önbellek (büyük, yeniden üretilebilir) ---
+# --- Generated outputs / cache (large, reproducible) ---
 *.hdf5
 simulation_data.hdf5
 *.npz
 cache/
+.cache/
+workspace/
 __rcwa_cache__/
 
-# --- Büyük simülasyon çıktıları / maskeler ---
+# --- Large simulation outputs / masks ---
 *.gds
 *.gdsii
 *.png
@@ -32,7 +36,7 @@ Simulasyonlar/
 outputs/
 figures/
 
-# --- Gizli / yerel yapılandırma (ASLA commit edilmez) ---
+# --- Secrets / local config (NEVER commit) ---
 .tidy3d/
 *config*.json
 *.key
@@ -41,7 +45,7 @@ figures/
 .env.*
 secrets*
 
-# --- Editör / işletim sistemi ---
+# --- Editor / OS ---
 .vscode/
 .idea/
 *.swp

@@ -1,45 +1,45 @@
-"""Örnek 9 — TAM-DALGA metalens, FDTD (Meep) ile — GERÇEK sonlu yapı referansı.
+"""Example 9 — FULL-WAVE metalens with FDTD (Meep) — reference for the REAL finite structure.
 
-Neden bu dosya: Kalın+yüksek-indisli metalens süper-hücresi RCWA için kötü-koşullu
-olabilir (bkz. 08 ve Kod Dersi 08). FDTD sonlu yapıyı doğrudan, kararlı biçimde
-çözer ve topluluğun tam-dalga metalens doğrulamasında altın standardıdır.
+Why this file: a thick + high-index metalens super-cell can be ill-conditioned for RCWA
+(see example 08). FDTD solves the finite structure directly and stably, and is the
+community's gold standard for full-wave metalens verification.
 
-DURUM: Bu bir ŞABLONdur. Meep sandbox'ta pip ile kurulamaz (conda gerekir), bu
-yüzden burada çalıştırılıp test EDİLMEDİ. Kendi makinende/HPC'de çalıştır:
+STATUS: this is a TEMPLATE. Meep cannot be installed with pip (conda is required), so
+it is not covered by the automated tests. Run it on your own machine/HPC:
 
     conda create -n mp -c conda-forge pymeep
     conda activate mp
     python examples/09_metalens_fdtd_meep.py
 
-Kaynak: Oskooi ve ark. 2010, Comput. Phys. Commun. 181, 687 (Meep). Ayrıntı:
-[[📚 RCWA ve Metalens Kaynakçası]]. Büyük 3B lensler için GPU-RCWA (TORCWA) de bir seçenek.
+Reference: Oskooi et al. 2010, Comput. Phys. Commun. 181, 687 (Meep).
+For large 3D lenses GPU-RCWA (TORCWA) is also an option.
 
-Bu senaryo: 1B (silindirik) metalensin 2B-FDTD kesiti — RCWA sonucuyla (08)
-kıyaslanabilir: aynı D_lens, f, Lcell, H, n_pillar kullan.
+This scenario: a 2D-FDTD cross-section of a 1D (cylindrical) metalens — comparable with
+the RCWA result (08): use the same D_lens, f, Lcell, H, n_pillar.
 """
 try:
     import meep as mp
 except ImportError:
-    raise SystemExit("Meep kurulu değil. Kur:  conda install -c conda-forge pymeep")
+    raise SystemExit("Meep is not installed. Install:  conda install -c conda-forge pymeep")
 import numpy as np
 
-# ---- lens parametreleri (08 ile aynı tut) ----
+# ---- lens parameters (keep identical to 08) ----
 lam0 = 0.633; Lcell = 0.35; H = 0.60; n_pillar = 2.4
 D_lens = 6.0; f = 6.0
-res = 40                      # piksel/um (yakınsama için artır)
+res = 40                      # pixels/um (increase for convergence)
 dpml = 1.0; gap_in = 1.5; gap_out = 2.2*f + 2.0
 fcen = 1.0/lam0
 
 Ncell = int(round(D_lens/Lcell)); D_lens = Ncell*Lcell
-sx = D_lens + 4.0            # enine pencere (+ kenar boşluğu)
+sx = D_lens + 4.0            # transverse window (+ margin)
 sy = dpml + gap_in + H + gap_out + dpml
 cell = mp.Vector3(sx, sy)
 pml = [mp.PML(dpml)]
 
-# ---- meta-atom faz kütüphanesi ----
-# Doğru yol: her genişlik için tek hücreyi (periyodik) RCWA/FDTD ile tarayıp
-# faz(w) çıkar (bkz. Kod Dersi 06). Basitlik için burada rcwa_py kütüphanesini
-# içe aktarıp genişlikleri seçebilirsin:
+# ---- meta-atom phase library ----
+# The proper way: sweep a single (periodic) cell over each width with RCWA/FDTD and
+# extract phase(w). For simplicity we import the rcwa library here and pick the
+# widths with it:
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rcwa import solve_rcwa_1d
@@ -49,12 +49,13 @@ for w in widths:
     eps = np.where(np.abs(xg-Lcell/2) < w/2, n_pillar**2, 1.0).astype(complex)
     r = solve_rcwa_1d(lam0, 0, 1, 1, Lcell, [(eps, H)], 21, pol=(0., 1.))
     ph.append(np.angle(r['ty'][r['zeroth_index']]))
-ph = np.unwrap(np.array(ph)); ph -= ph.min(); phm = np.mod(ph, 2*np.pi)
+ph = np.unwrap(np.array(ph)); ph -= ph.min()
+phm = np.mod(-ph, 2*np.pi)   # solver phase is exp(+jwt); the lens profile is exp(-iwt) -> negate (rcwa/convention.py)
 xc = (np.arange(Ncell)+0.5)*Lcell - D_lens/2
 phi = np.mod(-(2*np.pi/lam0)*(np.sqrt(xc**2+f**2)-f), 2*np.pi)
 chosen = np.array([widths[np.argmin(np.abs(np.angle(np.exp(1j*(phm-p)))))] for p in phi])
 
-# ---- geometri: nano-sütunlar ----
+# ---- geometry: nano-pillars ----
 y_lens = -sy/2 + dpml + gap_in + H/2
 geom = []
 for i in range(Ncell):
@@ -63,7 +64,7 @@ for i in range(Ncell):
                          center=mp.Vector3(cx, y_lens),
                          material=mp.Medium(index=n_pillar)))
 
-# ---- kaynak: düzlem dalga (Ez), lensin hemen üstünde ----
+# ---- source: plane wave (Ez), just above the lens ----
 y_src = -sy/2 + dpml + 0.3
 sources = [mp.Source(mp.ContinuousSource(frequency=fcen), component=mp.Ez,
                      center=mp.Vector3(0, y_src), size=mp.Vector3(sx, 0))]
@@ -72,25 +73,25 @@ sim = mp.Simulation(cell_size=cell, boundary_layers=pml, geometry=geom,
                     sources=sources, resolution=res, force_complex_fields=True)
 sim.run(until=200)
 
-# ---- alanı al, odak eksenini bul ----
+# ---- grab the field, find the focus on the axis ----
 ez = sim.get_array(center=mp.Vector3(), size=cell, component=mp.Ez)
 I = np.abs(ez)**2
 nx, ny = I.shape
 yv = np.linspace(-sy/2, sy/2, ny)
-y0 = -sy/2 + dpml + gap_in + H     # lens çıkış yüzeyi
+y0 = -sy/2 + dpml + gap_in + H     # lens exit surface
 axis = I[nx//2, :]
 mask = yv > y0
 zf = yv[mask][np.argmax(axis[mask])] - y0
-print(f"FDTD: gerçek odak (lens yüzeyinden) z ≈ {zf:.2f} um  (tasarım f={f} um)")
-print("Karşılaştır: RCWA süper-hücre (08) ile aynı D_lens,f için.")
-# İstersen matplotlib ile I haritasını kaydet.
+print(f"FDTD: actual focus (from the lens surface) z ≈ {zf:.2f} um  (design f={f} um)")
+print("Compare with the RCWA super-cell (08) for the same D_lens,f.")
+# Optionally save the I map with matplotlib.
 """
 
-Notlar / iyi uygulama:
-- `res` (çözünürlük) yakınsama parametresidir; 30-60 arası dene, odak/FWHM sabitlenene dek artır.
-- PML kalınlığı en az ~1 dalga boyu olsun (yansımasız açık sınır).
-- Bellek/zaman: 2B-FDTD kesit dizüstünde çalışır; tam 3B (gerçek 2B-periyodik lens)
-  disk/GPU ister -> Meep MPI veya GPU-RCWA (TORCWA).
-- Bu FDTD sonucunu 08'deki RCWA süper-hücre odağıyla kıyasla: yakın çıkmaları,
-  metalens tasarımının tam-dalga doğrulamasıdır.
+Notes / good practice:
+- `res` (resolution) is the convergence parameter; try 30-60 and increase until the focus/FWHM settle.
+- The PML should be at least ~1 wavelength thick (reflection-free open boundary).
+- Memory/time: a 2D-FDTD cross-section runs on a laptop; full 3D (a real 2D-periodic lens)
+  needs disk/GPU -> Meep MPI or GPU-RCWA (TORCWA).
+- Compare this FDTD result with the RCWA super-cell focus from 08: their agreement
+  is the full-wave verification of the metalens design.
 """

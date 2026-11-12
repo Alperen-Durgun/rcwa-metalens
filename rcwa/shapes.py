@@ -1,12 +1,14 @@
-"""Keyfi meta-atom geometrileri — Madde 4.
-Hem RCWA için rasterize edilmiş eps(x,y) hem de GDS için polygon köşeleri üretir;
-ikisi tutarlıdır. Şekiller: square, rect, circle, ellipse, hexagon, cross.
-params: şekle göre (um):
-  square:  size (kenar)             rect: (wx, wy)
-  circle:  size (çap)              ellipse: (ax, by) (çaplar)
-  hexagon: size (köşegen çapı)     cross: (kol_uzunluğu, kol_kalınlığı)
+"""Arbitrary meta-atom geometries — Item 4.
+Produces both a rasterized eps(x,y) for RCWA and polygon vertices for GDS;
+the two are consistent. Shapes: square, rect, circle, ellipse, hexagon, cross.
+params: per shape (um):
+  square:  size (side)             rect: (wx, wy)
+  circle:  size (diameter)         ellipse: (ax, by) (diameters)
+  hexagon: size (diagonal diameter)  cross: (arm_length, arm_thickness)
 """
 import numpy as np
+
+DEFAULT_N = 512   # default raster resolution per side used by the designers (see rasterize)
 
 
 def _rot(x, y, a):
@@ -14,8 +16,21 @@ def _rot(x, y, a):
     return c * x + s * y, -s * x + c * y
 
 
-def rasterize(shape, params, L, N, n_pillar=2.4, n_bg=1.0, angle=0.0):
-    """Birim hücrede (L×L) merkeze yerleştirilmiş şeklin eps(x,y) rasteri (N×N)."""
+def rasterize(shape, params, L, N, n_pillar=2.4, n_bg=1.0, angle=0.0, aa=1):
+    """eps(x,y) raster (N×N) of the shape centered in an (L×L) unit cell.
+
+    Resolution matters: a binary mask quantizes the feature size to the pixel pitch L/N,
+    so a size sweep on a coarse grid advances in steps (N=64, L=0.35um -> 5.5nm steps, i.e.
+    phase jumps of ~0.5 rad for a square pillar). Use N >= DEFAULT_N for design work — the
+    solver cost does not depend on N (only an FFT does).
+
+    aa : optional anti-aliasing. aa>1 sub-samples each pixel aa×aa and stores the
+    area-weighted MEAN permittivity. It smooths a sweep on a coarse grid but slightly biases
+    the result (boundary pixels would need an anisotropic average); prefer a larger N."""
+    if aa and aa > 1:
+        fine = rasterize(shape, params, L, N * int(aa), n_pillar=n_pillar, n_bg=n_bg, angle=angle, aa=1)
+        a = int(aa)
+        return fine.reshape(N, a, N, a).mean(axis=(1, 3))
     x = (np.arange(N) + 0.5) / N * L - L / 2
     X, Y = np.meshgrid(x, x, indexing="ij")
     Xr, Yr = _rot(X, Y, angle)
@@ -38,12 +53,12 @@ def rasterize(shape, params, L, N, n_pillar=2.4, n_bg=1.0, angle=0.0):
         m = ((np.abs(Xr) < arm / 2) & (np.abs(Yr) < th / 2)) | \
             ((np.abs(Yr) < arm / 2) & (np.abs(Xr) < th / 2))
     else:
-        raise ValueError(f"bilinmeyen şekil: {shape}")
+        raise ValueError(f"unknown shape: {shape}")
     return np.where(m, n_pillar ** 2, n_bg ** 2).astype(complex)
 
 
 def polygon(shape, params, center=(0.0, 0.0), angle=0.0, n_circle=48):
-    """Şeklin (cx,cy merkezli, angle döndürülmüş) köşe listesi — GDS için."""
+    """Vertex list of the shape (centered at cx,cy, rotated by angle) — for GDS."""
     p = params if np.iterable(params) else (params,)
     cx, cy = center
     if shape in ("square", "rect"):
@@ -61,6 +76,6 @@ def polygon(shape, params, center=(0.0, 0.0), angle=0.0, n_circle=48):
         pts = [(-arm,-th),(-th,-th),(-th,-arm),(th,-arm),(th,-th),(arm,-th),
                (arm,th),(th,th),(th,arm),(-th,arm),(-th,th),(-arm,th)]
     else:
-        raise ValueError(f"bilinmeyen şekil: {shape}")
+        raise ValueError(f"unknown shape: {shape}")
     c, s = np.cos(angle), np.sin(angle)
     return [(cx + c*x - s*y, cy + s*x + c*y) for x, y in pts]

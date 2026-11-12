@@ -1,17 +1,17 @@
-"""Örnek 10 — 2B METALENS TASARIMI (yerleşim + odak tahmini).
+"""Example 10 — 2D METALENS DESIGN (layout + focus prediction).
 
-Boru hattı:
-  1) 2B meta-atom faz kütüphanesi (solve_rcwa_2d, tek hücre periyodik)
-  2) dairesel açıklıkta hedef faz -> her hücreye sütun kenarı ata (2B harita)
-  3) yerel-periyodik near-field -> 2B açısal spektrum ile odak düzlemine yayılım
-     -> gerçek odak, FWHM, odaklama verimi
+Pipeline:
+  1) 2D meta-atom phase library (solve_rcwa_2d, single periodic cell)
+  2) target phase over a circular aperture -> assign a pillar side to each cell (2D map)
+  3) locally-periodic near field -> propagation to the focal plane via the 2D angular
+     spectrum -> actual focus, FWHM, focusing efficiency
 
-DÜRÜST SINIR: Bu YEREL PERİYODİK yaklaşımdır (her hücre yerel olarak periyodik
-kabul edilir; komşu kuplajı ihmal). Hızlıdır ve dizüstünde çalışır; tasarım ve
-ön-değerlendirme için standarttır. NİHAİ tam-dalga doğrulama için FDTD/GPU:
--> 09_metalens_fdtd_meep.py (Meep) veya TORCWA. Bkz. [[Kod Dersi 2B-Yerlesim ...]]
+HONEST LIMITATION: this is the LOCALLY PERIODIC approximation (each cell is assumed
+locally periodic; neighbor coupling is neglected). It is fast and runs on a laptop; it
+is the standard for design and pre-evaluation. For FINAL full-wave verification use
+FDTD/GPU: -> 09_metalens_fdtd_meep.py (Meep) or TORCWA.
 
-Çalıştır:  python examples/10_metalens_layout_2d.py
+Run:  python examples/10_metalens_layout_2d.py
 """
 import numpy as np, os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,10 +21,10 @@ import matplotlib.pyplot as plt
 
 lam0, Lcell, H, n_pillar = 0.633, 0.35, 0.60, 2.4
 D_lens, f = 20.0, 25.0
-M = 7                       # 2B birim-hücre mertebe yarı-sayısı
+M = 7                       # half-number of orders for the 2D unit cell
 k0 = 2*np.pi/lam0
 
-# 1) 2B faz kütüphanesi
+# 1) 2D phase library
 t = time.time()
 sides = np.linspace(0.06, 0.30, 20); libph = []; libam = []
 for s in sides:
@@ -33,10 +33,10 @@ for s in sides:
     r = solve_rcwa_2d(lam0, 0, 0, 1, 1, Lcell, Lcell, [(eps, H)], M, M, pol=(0., 1.))
     t0 = r['ty'][r['i0']]; libph.append(np.angle(t0)); libam.append(abs(t0))
 libph = np.unwrap(np.array(libph)); libph -= libph.min(); libam = np.array(libam)
-libphm = np.mod(libph, 2*np.pi)
-print(f"Kütüphane: faz {np.ptp(libph)/np.pi:.2f}π, ort. genlik {libam.mean():.2f}  ({time.time()-t:.0f}s)")
+libphm = np.mod(-libph, 2*np.pi)   # physical convention: negate the solver phase (rcwa/convention.py)
+print(f"Library: phase {np.ptp(libph)/np.pi:.2f}π, mean amplitude {libam.mean():.2f}  ({time.time()-t:.0f}s)")
 
-# 2) dairesel açıklıkta yerleşim
+# 2) layout over a circular aperture
 Nc = int(round(D_lens/Lcell)); D_lens = Nc*Lcell
 ci = (np.arange(Nc)-(Nc-1)/2)*Lcell
 XX, YY = np.meshgrid(ci, ci, indexing='ij'); R = np.sqrt(XX**2+YY**2)
@@ -49,9 +49,9 @@ for i in range(Nc):
             k = np.argmin(np.abs(np.angle(np.exp(1j*(libphm-phi[i, j])))))
             side_map[i, j] = sides[k]; amp_map[i, j] = libam[k]; ph_map[i, j] = libphm[k]
 NA = np.sin(np.arctan(D_lens/2/f))
-print(f"Yerleşim: {int(inside.sum())} sütun (dairesel açıklık), D={D_lens:.1f}um, f={f}um, NA={NA:.2f}")
+print(f"Layout: {int(inside.sum())} pillars (circular aperture), D={D_lens:.1f}um, f={f}um, NA={NA:.2f}")
 
-# 3) yerel-periyodik near-field -> 2B açısal spektrum
+# 3) locally-periodic near field -> 2D angular spectrum
 E0 = np.where(inside, amp_map*np.exp(1j*ph_map), 0.0)
 u = 4; E0f = np.kron(E0, np.ones((u, u))); dx = Lcell/u; Ncf = Nc*u
 pad = int(Ncf*1.6); E0p = np.zeros((pad, pad), complex); o = (pad-Ncf)//2
@@ -67,22 +67,22 @@ xax = (np.arange(pad)-pad//2)*dx; cut = I[:, pad//2]/I.max()
 hw = xax[cut >= 0.5]; fwhm = hw.max()-hw.min()
 rr = np.sqrt((xax[:, None])**2 + (xax[None, :])**2)
 eff = I[rr <= 1.5*fwhm].sum()/(np.abs(E0p)**2).sum()
-print(f"Yerel-periyodik odak: z={zf:.1f}um (tasarım {f}) | FWHM={fwhm*1000:.0f}nm | λ/(2NA)={lam0/(2*NA)*1000:.0f}nm | odak verimi ~{eff*100:.0f}%")
+print(f"Locally-periodic focus: z={zf:.1f}um (design {f}) | FWHM={fwhm*1000:.0f}nm | λ/(2NA)={lam0/(2*NA)*1000:.0f}nm | focusing efficiency ~{eff*100:.0f}%")
 
-# --- figür ---
+# --- figure ---
 fig, ax = plt.subplots(1, 3, figsize=(14, 4.3))
 sm = np.where(inside, side_map*1000, np.nan)
 im0 = ax[0].imshow(sm, origin="lower", extent=[ci[0], ci[-1], ci[0], ci[-1]], cmap="viridis")
-ax[0].set_title("Sütun kenarı haritası (nm)"); ax[0].set_xlabel("x (um)"); ax[0].set_ylabel("y (um)")
+ax[0].set_title("Pillar side map (nm)"); ax[0].set_xlabel("x (um)"); ax[0].set_ylabel("y (um)")
 plt.colorbar(im0, ax=ax[0], fraction=0.046)
 ext = xax.max()
 im1 = ax[1].imshow(I/I.max(), origin="lower", extent=[-ext, ext, -ext, ext], cmap="inferno")
 ax[1].set_xlim(-3, 3); ax[1].set_ylim(-3, 3)
-ax[1].set_title(f"Odak düzlemi I(x,y) @ z={zf:.1f}um"); ax[1].set_xlabel("x (um)"); ax[1].set_ylabel("y (um)")
+ax[1].set_title(f"Focal plane I(x,y) @ z={zf:.1f}um"); ax[1].set_xlabel("x (um)"); ax[1].set_ylabel("y (um)")
 plt.colorbar(im1, ax=ax[1], fraction=0.046)
 ax[2].plot(xax*1000, cut); ax[2].axhline(0.5, color="gray", ls=":"); ax[2].set_xlim(-2500, 2500)
-ax[2].set_xlabel("x (nm)"); ax[2].set_ylabel("I (norm)"); ax[2].set_title(f"Odak kesiti — FWHM={fwhm*1000:.0f}nm")
-fig.suptitle(f"2B METALENS tasarımı — D={D_lens:.0f}um f={f}um NA={NA:.2f} | odak z={zf:.1f}um, verim~{eff*100:.0f}% (yerel-periyodik)")
+ax[2].set_xlabel("x (nm)"); ax[2].set_ylabel("I (norm)"); ax[2].set_title(f"Focal cut — FWHM={fwhm*1000:.0f}nm")
+fig.suptitle(f"2D METALENS design — D={D_lens:.0f}um f={f}um NA={NA:.2f} | focus z={zf:.1f}um, efficiency~{eff*100:.0f}% (locally-periodic)")
 fig.tight_layout()
 out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "Simulasyonlar", "metalens_layout_2d.png"))
-fig.savefig(out, dpi=130); print("Grafik ->", out)
+fig.savefig(out, dpi=130); print("Plot ->", out)

@@ -1,25 +1,40 @@
-"""Tasarım metrikleri — Madde 4.
-Odaklama verimi, FWHM, Strehl oranı, MTF, uzak-alan. Metayüzey/lens başarı ölçütleri.
+"""Design metrics — Item 4.
+Focusing efficiency, FWHM, Strehl ratio, MTF, far-field. Metasurface/lens figures of merit.
 """
 import numpy as np
 
 
 def fwhm_1d(cut, coord):
-    """Bir kesitin FWHM'i (coord birimiyle)."""
-    c = cut / cut.max()
-    idx = coord[c >= 0.5]
-    return float(idx.max() - idx.min()) if idx.size else 0.0
+    """FWHM of the MAIN LOBE of a cut (in units of coord).
+
+    The half-maximum crossings on both sides of the peak are located by linear
+    interpolation (sub-grid accuracy); sidelobes that exceed 0.5 are ignored."""
+    c = np.asarray(cut, float); x = np.asarray(coord, float)
+    if c.size < 2 or not np.all(np.isfinite(c)) or c.max() <= 0:
+        return 0.0
+    c = c / c.max(); p = int(np.argmax(c))
+
+    def _cross(step):
+        i = p
+        while 0 <= i + step < c.size and c[i + step] >= 0.5:
+            i += step
+        j = i + step
+        if j < 0 or j >= c.size:
+            return x[i]                       # lobe runs off the window edge
+        return x[i] + (0.5 - c[i]) * (x[j] - x[i]) / (c[j] - c[i])
+
+    return float(abs(_cross(+1) - _cross(-1)))
 
 
 def focal_metrics(I, coord):
-    """2B odak şiddeti I(x,y), coord=1B eksen. FWHM (x ve y) + tepe konumu."""
+    """2D focal intensity I(x,y), coord=1D axis. FWHM (x and y) + peak position."""
     I = np.asarray(I); j = np.unravel_index(np.argmax(I), I.shape)
     fx = fwhm_1d(I[:, j[1]], coord); fy = fwhm_1d(I[j[0], :], coord)
     return {"fwhm_x": fx, "fwhm_y": fy, "peak_ij": j, "peak": float(I.max())}
 
 
 def focusing_efficiency(I, coord, fwhm, r_factor=1.5):
-    """Odak lekesindeki güç / düzlemdeki toplam güç (r_factor·FWHM yarıçaplı disk)."""
+    """Power in the focal spot / total power in the plane (disk of radius r_factor·FWHM)."""
     j = np.unravel_index(np.argmax(I), I.shape)
     X, Y = np.meshgrid(coord, coord, indexing="ij")
     rr = np.hypot(X - coord[j[0]], Y - coord[j[1]])
@@ -27,22 +42,22 @@ def focusing_efficiency(I, coord, fwhm, r_factor=1.5):
 
 
 def strehl(I_design, I_ideal):
-    """Strehl oranı: tasarım tepe / ideal (aberasyonsuz) tepe (aynı güç normalizasyonu)."""
+    """Strehl ratio: design peak / ideal (aberration-free) peak (same power normalization)."""
     return float((I_design.max() / I_design.sum()) / (I_ideal.max() / I_ideal.sum()))
 
 
 def mtf_1d(psf_row):
-    """1B MTF: PSF kesitinin normalize |FFT|'i (uzaysal frekansa karşı kontrast)."""
+    """1D MTF: normalized |FFT| of the PSF cut (contrast vs. spatial frequency)."""
     m = np.abs(np.fft.fftshift(np.fft.fft(psf_row)))
     return m / m.max()
 
 
 def efficiency_suite(I, coord, fwhm, P_incident=None, r_abs=3.0, r_leg=1.5):
-    """Literatür-standardı verim tanımları (tutarsızlığı gidermek için hepsi):
-      - absolute : 3×FWHM diskindeki güç / GELEN güç (P_incident)   [standart raporlama]
-      - relative : 3×FWHM diskindeki güç / odak-düzlemi TOPLAM gücü
-      - legacy   : 1.5×FWHM diskindeki güç / odak-düzlemi toplam (bizim eski tanım)
-    P_incident verilmezse absolute=None."""
+    """Literature-standard efficiency definitions (all of them, to remove ambiguity):
+      - absolute : power in the 3×FWHM disk / INCIDENT power (P_incident)   [standard reporting]
+      - relative : power in the 3×FWHM disk / TOTAL focal-plane power
+      - legacy   : power in the 1.5×FWHM disk / focal-plane total (our old definition)
+    If P_incident is not given, absolute=None."""
     I = np.asarray(I); j = np.unravel_index(np.argmax(I), I.shape)
     X, Y = np.meshgrid(coord, coord, indexing="ij")
     rr = np.hypot(X - coord[j[0]], Y - coord[j[1]])
@@ -55,8 +70,8 @@ def efficiency_suite(I, coord, fwhm, P_incident=None, r_abs=3.0, r_leg=1.5):
 
 
 def encircled_energy(I, coord, fraction=0.8):
-    """Kuşatılmış enerji: tepe merkezli, toplam odak-düzlemi enerjisinin 'fraction'ını
-    içeren yarıçap (coord birimi). Leke konsantrasyonu ölçütü."""
+    """Encircled energy: peak-centered radius (in units of coord) containing 'fraction'
+    of the total focal-plane energy. A measure of spot concentration."""
     I = np.asarray(I); j = np.unravel_index(np.argmax(I), I.shape)
     X, Y = np.meshgrid(coord, coord, indexing="ij")
     rr = np.hypot(X - coord[j[0]], Y - coord[j[1]]).ravel()
@@ -67,10 +82,10 @@ def encircled_energy(I, coord, fraction=0.8):
 
 
 def sidelobe_level(psf_row):
-    """En yüksek yan-lobun ana tepeye oranı (lineer ve dB). PSF kesitinden."""
+    """Ratio of the highest sidelobe to the main peak (linear and dB). From a PSF cut."""
     c = np.asarray(psf_row, float); c = c / c.max()
     p = int(np.argmax(c))
-    # ana lobun ilk minimumlarını bul
+    # find the first minima of the main lobe
     lo = p
     while lo > 0 and c[lo - 1] <= c[lo]:
         lo -= 1
@@ -85,12 +100,12 @@ def sidelobe_level(psf_row):
 
 
 def depth_of_focus(I_axis, z):
-    """Odak derinliği: eksen-üstü I(z)'nin FWHM'i (z birimi)."""
+    """Depth of focus: FWHM of the on-axis I(z) (in units of z)."""
     return fwhm_1d(np.asarray(I_axis, float), np.asarray(z, float))
 
 
 def mtf_2d(psf2d):
-    """2B MTF: PSF'in |FFT|'inin radyal ortalaması (normalize). Döndürür: (mtf_radial, )."""
+    """2D MTF: radial average of the |FFT| of the PSF (normalized). Returns: (mtf_radial, )."""
     P = np.abs(np.fft.fftshift(np.fft.fft2(psf2d)))
     N = P.shape[0]; c = N // 2
     y, x = np.mgrid[0:N, 0:N]; r = np.hypot(x - c, y - c).astype(int)
@@ -103,14 +118,14 @@ _TRAPZ = getattr(np, "trapezoid", getattr(np, "trapz", np.sum))  # numpy 2.x: tr
 
 
 def strehl_mtf(mtf_design, mtf_ideal):
-    """MTF-tabanlı Strehl: tasarım MTF-altı-alan / ideal MTF-altı-alan (alternatif Strehl tanımı)."""
+    """MTF-based Strehl: area under design MTF / area under ideal MTF (alternative Strehl definition)."""
     a = float(_TRAPZ(mtf_design)); b = float(_TRAPZ(mtf_ideal))
     return a / b if b > 0 else float("nan")
 
 
 def group_delay(phase, omega):
-    """Meta-atom fazından grup gecikmesi GD=dφ/dω ve GDD=d²φ/dω² (akromatik tasarım kriteri).
-    phase, omega: dalga boyu taramasından (ω=2πc/λ). Döndürür: (GD_merkez, GDD_merkez)."""
+    """Group delay GD=dφ/dω and GDD=d²φ/dω² from the meta-atom phase (achromatic design criterion).
+    phase, omega: from a wavelength sweep (ω=2πc/λ). Returns: (GD_center, GDD_center)."""
     phase = np.unwrap(np.asarray(phase, float)); omega = np.asarray(omega, float)
     gd = np.gradient(phase, omega); gdd = np.gradient(gd, omega)
     k = len(omega) // 2
@@ -118,7 +133,7 @@ def group_delay(phase, omega):
 
 
 def angular_spectrum(E0, dx, lam, z):
-    """E0(x,y) alanını serbest uzayda z'ye taşı (exact)."""
+    """Propagate the field E0(x,y) to z in free space (exact)."""
     k0 = 2 * np.pi / lam; N = E0.shape[0]
     kx = 2 * np.pi * np.fft.fftfreq(N, d=dx); KX, KY = np.meshgrid(kx, kx, indexing="ij")
     KZ = np.sqrt((k0 ** 2 - KX ** 2 - KY ** 2).astype(complex)); KZ = np.where(np.imag(KZ) < 0, -KZ, KZ)

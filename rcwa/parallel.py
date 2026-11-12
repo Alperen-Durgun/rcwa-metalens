@@ -1,20 +1,21 @@
-"""Paralel sweep aracı — B7.
+"""Parallel sweep helper — B7.
 
-Bağımsız RCWA hesaplarını (kütüphane/dalga boyu/açı taramaları) çok çekirdekte
-koşturur. Top-level worker gerektiği için işlev + argüman listesi alır.
+Runs independent RCWA computations (library/wavelength/angle sweeps) across
+multiple cores. It takes a function + a list of arguments because it needs a
+top-level worker.
 
-Kullanım:
+Usage:
     from rcwa.parallel import parallel_map
-    sonuçlar = parallel_map(worker, arg_listesi, n_jobs=4)
+    results = parallel_map(worker, arg_list, n_jobs=4)
 
-Not: Windows'ta ana betik `if __name__ == "__main__":` altında olmalı.
-n_jobs=1 -> seri (güvenli varsayılan).
+Note: on Windows the main script must be under `if __name__ == "__main__":`.
+n_jobs=1 -> serial (safe default).
 """
 from concurrent.futures import ProcessPoolExecutor
 
 
 def parallel_map(func, args_list, n_jobs=1):
-    """func'ı args_list'in her elemanına uygular. n_jobs>1 -> paralel süreç havuzu."""
+    """Applies func to each element of args_list. n_jobs>1 -> parallel process pool."""
     if n_jobs is None or n_jobs <= 1:
         return [func(a) for a in args_list]
     with ProcessPoolExecutor(max_workers=n_jobs) as ex:

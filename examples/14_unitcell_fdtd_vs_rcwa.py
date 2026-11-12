@@ -1,12 +1,12 @@
-"""Örnek 14 — Birim-hücre: RCWA vs Tidy3D FDTD (UCUZ doğrulama).
+"""Example 14 — Unit cell: RCWA vs Tidy3D FDTD (CHEAP verification).
 
-Tek meta-atomun 0. mertebe geçişini RCWA ve FDTD ile karşılaştırır. Subwavelength
-periyot -> yalnız 0. mertebe -> T karşılaştırması temiz. Maliyet ~kuruşluk kredi.
-Bu, tüm tasarımın dayandığı meta-atom kütüphanesini doğrular.
+Compares the 0th-order transmission of a single meta-atom between RCWA and FDTD.
+Subwavelength period -> 0th order only -> a clean T comparison. Costs a tiny
+fraction of a credit. This validates the meta-atom library the whole design rests on.
 
-Kullanım:
-  python examples/14_unitcell_fdtd_vs_rcwa.py            # RCWA + Tidy3D maliyet TAHMİNİ
-  python examples/14_unitcell_fdtd_vs_rcwa.py run        # FDTD'yi çalıştır (kredi harcar!)
+Usage:
+  python examples/14_unitcell_fdtd_vs_rcwa.py            # RCWA + Tidy3D cost ESTIMATE
+  python examples/14_unitcell_fdtd_vs_rcwa.py run        # run the FDTD (spends credits!)
 """
 import sys, os, numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,13 +15,13 @@ from rcwa import solve_rcwa_2d, shapes, materials
 lam0 = 0.633; L = 0.35; H = 0.60; size = 0.20; mat = "TiO2_t"
 n = float(np.real(np.sqrt(materials.eps_of(mat, lam0))))
 
-# --- RCWA (yerel, ücretsiz) ---
-eps = shapes.rasterize("circle", size, L, 64, n_pillar=n)
+# --- RCWA (local, free) ---
+eps = shapes.rasterize("circle", size, L, shapes.DEFAULT_N, n_pillar=n)
 r = solve_rcwa_2d(lam0, 0, 0, 1, 1, L, L, [(eps, H)], 8, 8, pol=(0., 1.))
 T_rcwa = float(r["Ttot"]); t0 = r["ty"][r["i0"]]
-print(f"RCWA:  T={T_rcwa:.4f}  faz(0.mertebe)={np.angle(t0, deg=True):.1f}°  (n_{mat}={n:.2f})")
+print(f"RCWA:  T={T_rcwa:.4f}  phase(0th order)={np.angle(t0, deg=True):.1f}°  (n_{mat}={n:.2f})")
 
-# --- Tidy3D birim hücre (periyodik) ---
+# --- Tidy3D unit cell (periodic) ---
 import tidy3d as td
 freq0 = td.C_0 / lam0
 dpml = 0.8; airin = 0.8; airout = 1.2
@@ -38,15 +38,15 @@ sim = td.Simulation(
     structures=[pillar], sources=[src], monitors=[flux], run_time=1.2e-12,
     boundary_spec=td.BoundarySpec(x=td.Boundary.periodic(), y=td.Boundary.periodic(),
                                   z=td.Boundary.pml()))
-print("Tidy3D birim-hücre Simulation kuruldu.")
+print("Tidy3D unit-cell Simulation built.")
 
 from tidy3d import web
 job = web.Job(simulation=sim, task_name="unitcell_verify")
-cost = job.estimate_cost()   # ücretsiz: kredi harcamaz
-print(f"Tahmini maliyet: {cost:.3f} FlexCredit")
+cost = job.estimate_cost()   # free: spends no credits
+print(f"Estimated cost: {cost:.3f} FlexCredit")
 if len(sys.argv) > 1 and sys.argv[1] == "run":
-    data = job.run()          # kredi HARCAR
+    data = job.run()          # SPENDS credits
     T_fdtd = float(np.abs(np.asarray(data["T"].flux.values).ravel()[0]))
-    print(f"\nSONUÇ:  RCWA T={T_rcwa:.4f}  |  FDTD T={T_fdtd:.4f}  |  fark={abs(T_rcwa-T_fdtd):.4f}")
+    print(f"\nRESULT:  RCWA T={T_rcwa:.4f}  |  FDTD T={T_fdtd:.4f}  |  diff={abs(T_rcwa-T_fdtd):.4f}")
 else:
-    print("Çalıştırmak (kredi harcar): python examples/14_unitcell_fdtd_vs_rcwa.py run")
+    print("To run (spends credits): python examples/14_unitcell_fdtd_vs_rcwa.py run")

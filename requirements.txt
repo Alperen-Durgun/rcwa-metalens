@@ -1,20 +1,20 @@
-# RCWA Metalens — çekirdek + özellik bağımlılıkları
-# Kur:  pip install -r requirements.txt
-# (Windows .venv içinden çalıştır.)
+# RCWA Metalens — core + feature dependencies
+# Install:  pip install -r requirements.txt
+# (Run from inside your virtual environment / .venv.)
 
-# --- ZORUNLU (tüm çekirdek + E1/E3/E4/E7 özellikleri) ---
+# --- REQUIRED (all core + E1/E3/E4/E7 features) ---
 numpy
 scipy
 matplotlib
-grcwa            # doğrulama + adjoint(E1) + metal-2B(E3) + non-ortogonal kafes(E4)
-autograd         # adjoint/autodiff gradyanları (E1)
-gdstk            # GDS üretimi
-pyyaml           # refractiveindex.info YAML malzeme içe aktarma (E7)
+grcwa            # validation + adjoint(E1) + metallic-2D(E3) + non-orthogonal lattice(E4)
+autograd         # adjoint/autodiff gradients (E1)
+gdstk            # GDS generation
+pyyaml           # refractiveindex.info YAML material import (E7)
 
-# --- OPSİYONEL (gerektiğinde) ---
-# tidy3d         # 3B FDTD bulut doğrulama (E5/E6) — akademik ücretsiz kredi
-                 # kur:  pip install tidy3d   sonra:  tidy3d configure
-# jax[cuda12]    # E2 GPU + autodiff (yalnız NVIDIA GPU)  ->  pip install "jax[cuda12]"
-# cupy-cuda12x   # E2 GPU dizilim (numpy-uyumlu, NVIDIA GPU)
-# meep           # yerel/çevrimdışı 3B FDTD (conda):
+# --- OPTIONAL (when needed) ---
+# tidy3d         # 3D FDTD cloud validation (E5/E6) — free academic credits
+                 # install:  pip install tidy3d   then:  tidy3d configure
+# jax[cuda12]    # E2 GPU + autodiff (NVIDIA GPU only)  ->  pip install "jax[cuda12]"
+# cupy-cuda12x   # E2 GPU arrays (numpy-compatible, NVIDIA GPU)
+# meep           # local/offline 3D FDTD (conda):
                  #   conda create -n mp -c conda-forge pymeep pymeep-extras

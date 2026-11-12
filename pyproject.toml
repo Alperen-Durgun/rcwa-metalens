@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rcwa-metalens"
-version = "0.1.0"
+dynamic = ["version"]
 description = "From-scratch, FDTD-validated RCWA solver and metalens design pipeline (1D/2D, GDS export, optical metrics, Meep/Tidy3D bridges)."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -33,8 +33,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-fdtd = ["tidy3d"]        # bulut FDTD doğrulama (meep conda ile ayrı kurulur)
-gpu = ["jax", "cupy"]    # E2 GPU arka uçları (NVIDIA)
+fdtd = ["tidy3d"]        # cloud FDTD validation (meep is installed separately via conda)
+gpu = ["jax", "cupy"]    # E2 GPU backends (NVIDIA)
 
 [project.urls]
 Homepage = "https://github.com/Alperen-Durgun/rcwa-metalens"
@@ -42,6 +42,9 @@ Repository = "https://github.com/Alperen-Durgun/rcwa-metalens"
 
 [tool.setuptools]
 packages = ["rcwa"]
+
+[tool.setuptools.dynamic]
+version = { attr = "rcwa.__version__" }
 
 [tool.setuptools.package-data]
 rcwa = ["materials_data/*.csv"]

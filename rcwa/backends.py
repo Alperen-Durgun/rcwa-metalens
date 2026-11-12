@@ -1,19 +1,19 @@
-"""E2 — GPU-HAZIR BACKEND seçimi.
+"""E2 — GPU-READY BACKEND selection.
 
-RCWA çekirdeğimiz numpy/CPU. GPU + otomatik türev için iki gerçek yol:
-  1) grcwa 'jax' backend'i  -> jax-GPU kuruluysa gradyanlar GPU'da (adjoint ters tasarım).
-  2) cupy                    -> numpy uyumlu; ileri çözüm GPU'da (autodiff yok).
+Our RCWA core is numpy/CPU. For GPU + automatic differentiation there are two real paths:
+  1) grcwa 'jax' backend  -> if jax-GPU is installed, gradients run on GPU (adjoint inverse design).
+  2) cupy                  -> numpy-compatible; forward solve on GPU (no autodiff).
 
-Bu modül hangi hızlandırıcının mevcut olduğunu bildirir ve adjoint'e uygun backend'i seçtirir.
-Donanım/kurulum yoksa otomatik olarak autograd/CPU'ya düşer (kod-hazır, kilitlenmesiz).
+This module reports which accelerators are available and selects a backend suitable for adjoint.
+If there is no hardware/installation it falls back automatically to autograd/CPU (code-ready, no crash).
 
-Kurulum (kullanıcı, isteğe bağlı):
+Installation (user, optional):
   pip install "jax[cuda12]"   # NVIDIA GPU + autodiff (grcwa jax backend)
-  pip install cupy-cuda12x    # numpy-uyumlu GPU dizilimi
+  pip install cupy-cuda12x    # numpy-compatible GPU arrays
 """
 
 def available():
-    """Hangi hızlandırıcılar kurulu? -> sözlük."""
+    """Which accelerators are installed? -> dict."""
     out = {"autograd": False, "jax": False, "jax_gpu": False, "cupy": False, "torch": False, "torch_gpu": False}
     try:
         import autograd; out["autograd"] = True
@@ -32,8 +32,8 @@ def available():
 
 
 def pick_grcwa_backend(prefer_gpu=True):
-    """adjoint için grcwa backend'i seç: jax(GPU varsa) yoksa autograd.
-    Döndürür: (backend_adı, gpu_mu)."""
+    """Select a grcwa backend for adjoint: jax (if GPU) else autograd.
+    Returns: (backend_name, is_gpu)."""
     av = available()
     if prefer_gpu and av["jax"]:
         return "jax", av["jax_gpu"]
@@ -41,8 +41,8 @@ def pick_grcwa_backend(prefer_gpu=True):
 
 
 def get_xp(prefer_gpu=True):
-    """İleri (gradyansız) hesap için dizilim modülü: cupy(GPU) yoksa numpy.
-    Kullanım: xp = get_xp(); a = xp.zeros(...)  -> kod numpy ile aynı."""
+    """Array module for forward (gradient-free) computation: cupy (GPU) else numpy.
+    Usage: xp = get_xp(); a = xp.zeros(...)  -> code is identical to numpy."""
     if prefer_gpu:
         try:
             import cupy as cp
@@ -58,8 +58,8 @@ def summary():
     av = available()
     xp, xpname = get_xp()
     gb, gpu = pick_grcwa_backend()
-    return (f"Hızlandırıcılar: {av}\n"
-            f"İleri hesap dizilimi: {xpname}\n"
+    return (f"Accelerators: {av}\n"
+            f"Forward array module: {xpname}\n"
             f"Adjoint backend: {gb} (GPU={gpu})")
 
 

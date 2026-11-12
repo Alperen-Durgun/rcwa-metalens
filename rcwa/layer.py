@@ -1,6 +1,6 @@
-"""Katman çözümü — Ders 04 & Kod Dersi 02.
-Homojen ve gratingli katmanlar için özmodları (W, V, LAM) ve katman
-scattering matrisini üretir. Rumpf (EMPossible) formülasyonu, gap medium ile.
+"""Layer solution — Lesson 04 & Coding Lesson 02.
+Produces the eigenmodes (W, V, LAM) and the layer scattering matrix for
+homogeneous and grating layers. Rumpf (EMPossible) formulation, with a gap medium.
 """
 import numpy as np
 from scipy.linalg import eig
@@ -8,74 +8,87 @@ from .convmat import convmat1d
 
 
 def homogeneous_modes(KX, KY, er, ur=1.0):
-    """Homojen bir bölgenin özmodları (W=I, V, KZ)."""
+    """Eigenmodes of a homogeneous region (W=I, V, KZ)."""
     P = KX.shape[0]
     I = np.eye(P, dtype=complex)
     Z = np.zeros((P, P), dtype=complex)
     Q = (1.0 / ur) * np.block([[KX @ KY, ur * er * I - KX @ KX],
                                [KY @ KY - ur * er * I, -KY @ KX]])
-    KZ = np.conj(np.sqrt((er * ur) * I - KX @ KX - KY @ KY))
+    kz = np.conj(np.sqrt((er * ur) - np.diag(KX) ** 2 - np.diag(KY) ** 2 + 0j))   # KX, KY are diagonal
+    KZ = np.diag(kz)
     W = np.eye(2 * P, dtype=complex)
-    LAM = 1j * np.block([[KZ, Z], [Z, KZ]])
-    V = Q @ np.linalg.inv(LAM)
+    V = Q / (1j * np.concatenate([kz, kz]))[None, :]        # Q @ inv(LAM), LAM diagonal
     return W, V, KZ
 
 
-def grating_modes(eps_x, KX, KY, P):
-    """Gratingli katmanın özmod çözümü: P,Q -> Omega^2 -> eig."""
+def grating_modes(eps_x, KX, KY, P, rule="inverse"):
+    """Eigenmode solution of a grating layer: P,Q -> Omega^2 -> eig.
+
+    rule="inverse" (default): Li's Fourier factorization for an x-periodic grating — the
+    matrix multiplying Ex (normal to the walls) is inv([[1/eps]]); Ey and Ez keep the Laurent
+    matrix [[eps]]. This is what makes TM converge quickly at high contrast. TE is unaffected.
+    rule="laurent": the plain rule everywhere (slow TM convergence; kept for comparison)."""
+    eps_x = np.asarray(eps_x, dtype=complex)
     ER = convmat1d(eps_x, P)
     ERi = np.linalg.inv(ER)
+    ERx = np.linalg.inv(convmat1d(1.0 / eps_x, P)) if rule == "inverse" else ER
     I = np.eye(P, dtype=complex)
     Pmat = np.block([[KX @ ERi @ KY, I - KX @ ERi @ KX],
                      [KY @ ERi @ KY - I, -KY @ ERi @ KX]])
     Qmat = np.block([[KX @ KY, ER - KX @ KX],
-                     [KY @ KY - ER, -KY @ KX]])
+                     [KY @ KY - ERx, -KY @ KX]])
     OM2 = Pmat @ Qmat
     w2, W = eig(OM2)
     lam = np.sqrt(w2.astype(complex))
-    lam = np.where(np.real(lam) < 0, -lam, lam)  # Re(lam) >= 0 (kararlılık)
-    LAM = np.diag(lam)
-    V = Qmat @ W @ np.linalg.inv(LAM)
+    lam = np.where(np.real(lam) < 0, -lam, lam)  # Re(lam) >= 0 (stability)
+    V = (Qmat @ W) / lam[None, :]                # Qmat @ W @ inv(diag(lam))
     return W, V, lam
 
 
 def layer_smatrix(W, V, lam, k0, d, Wg, Vg):
-    """Bir katmanın scattering matrisi (gap medium referansıyla)."""
-    Wi = np.linalg.inv(W); Vi = np.linalg.inv(V)
-    A = Wi @ Wg + Vi @ Vg
-    B = Wi @ Wg - Vi @ Vg
-    X = np.diag(np.exp(-lam * k0 * d))
-    Ai = np.linalg.inv(A)
-    D = A - X @ B @ Ai @ X @ B
-    Di = np.linalg.inv(D)
-    S11 = Di @ (X @ B @ Ai @ X @ A - B)
-    S12 = Di @ X @ (A - B @ Ai @ B)
+    """Scattering matrix of a layer (referenced to the gap medium)."""
+    WiWg = np.linalg.solve(W, Wg); ViVg = np.linalg.solve(V, Vg)
+    A = WiWg + ViVg
+    B = WiWg - ViVg
+    x = np.exp(-lam * k0 * d)[:, None]            # diagonal propagator X as a column scale
+    AiXB = np.linalg.solve(A, x * B)              # inv(A) @ X @ B
+    AiXA = np.linalg.solve(A, x * A)              # inv(A) @ X @ A
+    AiB = np.linalg.solve(A, B)                   # inv(A) @ B
+    XB = x * B
+    D = A - XB @ AiXB
+    S = np.linalg.solve(D, np.hstack([XB @ AiXA - B, x * (A - B @ AiB)]))
+    n = A.shape[0]
+    S11 = S[:, :n]; S12 = S[:, n:]
     return (S11, S12, S12, S11)
 
 
-def modes_from_ER(ER, KX, KY):
-    """Verilen konvolüsyon matrisi ER'den katman özmodları (W, V, lam).
-    Hem 1B (convmat1d) hem 2B (convmat2d) ER ile çalışır — çekirdek aynı."""
+def modes_from_ER(ER, KX, KY, ERx=None, ERy=None):
+    """Layer eigenmodes (W, V, lam) from a given convolution matrix ER.
+    Works with both 1D (convmat1d) and 2D (convmat2d) ER — the core is the same.
+    ERx / ERy: optional Li-factorized matrices multiplying Ex / Ey (see convmat2d_li);
+    when omitted the plain Laurent ER is used for both."""
     P = KX.shape[0]
     I = np.eye(P, dtype=complex)
     ERi = np.linalg.inv(ER)
+    ERx = ER if ERx is None else ERx
+    ERy = ER if ERy is None else ERy
     Pmat = np.block([[KX @ ERi @ KY, I - KX @ ERi @ KX],
                      [KY @ ERi @ KY - I, -KY @ ERi @ KX]])
-    Qmat = np.block([[KX @ KY, ER - KX @ KX],
-                     [KY @ KY - ER, -KY @ KX]])
+    Qmat = np.block([[KX @ KY, ERy - KX @ KX],
+                     [KY @ KY - ERx, -KY @ KX]])
     w2, W = eig(Pmat @ Qmat)
     lam = np.sqrt(w2.astype(complex))
     lam = np.where(np.real(lam) < 0, -lam, lam)
-    V = Qmat @ W @ np.linalg.inv(np.diag(lam))
+    V = (Qmat @ W) / lam[None, :]                # Qmat @ W @ inv(diag(lam))
     return W, V, lam
 
 
 _MODE_CACHE = {}
 
 def modes_from_ER_cached(ER, KX, KY, maxsize=256):
-    """modes_from_ER'in bellek-içi önbellekli sürümü — B5.
-    Aynı (ER,KX,KY) katman tekrar geçtiğinde (ör. tekrarlı katman yığını) özmodları
-    yeniden çözmez. Anahtar: dizi baytlarının hash'i."""
+    """In-memory cached version of modes_from_ER — B5.
+    When the same (ER,KX,KY) layer recurs (e.g. a repeated layer stack), it avoids
+    re-solving the eigenmodes. Key: hash of the array bytes."""
     import hashlib
     key = hashlib.md5(ER.tobytes() + np.ascontiguousarray(np.diag(KX)).tobytes()
                       + np.ascontiguousarray(np.diag(KY)).tobytes()).hexdigest()

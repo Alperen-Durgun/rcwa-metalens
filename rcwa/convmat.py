@@ -1,53 +1,84 @@
-"""Konvolüsyon (Toeplitz) matrisi — Ders 03 & Kod Dersi 01.
-Periyodik bir eps(x) profilinin Fourier temsilini, mertebeleri birbirine
-bağlayan bir matrise çevirir. RCWA'nın tüm 'malzeme bilgisi' buradadır.
+"""Convolution (Toeplitz) matrix — Lesson 03 & Coding Lesson 01.
+Converts the Fourier representation of a periodic eps(x) profile into a matrix
+that couples the diffraction orders. All of RCWA's 'material knowledge' is here.
 """
 import numpy as np
 
 
 def convmat1d(eps_x, P):
-    """1D periyodik profilin P x P konvolüsyon matrisi.
+    """P x P convolution matrix of a 1D periodic profile.
 
-    Parametreler
-    ------------
-    eps_x : 1D dizi
-        Bir periyot boyunca düzgün örneklenmiş dielektrik sabiti eps(x).
+    Parameters
+    ----------
+    eps_x : 1D array
+        Dielectric constant eps(x) sampled uniformly over one period.
     P : int
-        Tutulacak uzaysal harmonik (mertebe) sayısı — tek olmalı (2M+1).
+        Number of spatial harmonics (orders) to keep — must be odd (2M+1).
 
-    Döndürür
-    --------
-    C : (P, P) karmaşık matris   (C[r,c] = eps_{r-c})
+    Returns
+    -------
+    C : (P, P) complex matrix   (C[r,c] = eps_{r-c})
     """
     if P % 2 == 0:
-        raise ValueError("P tek olmalı (2M+1).")
+        raise ValueError("P must be odd (2M+1).")
+    eps_x = np.asarray(eps_x)
     Nx = eps_x.shape[0]
-    # Fourier katsayıları (fftshift ile sıfır harmonik ortada)
+    if Nx < 2 * P - 1:
+        raise ValueError(f"eps_x has {Nx} samples; at least 2P-1 = {2 * P - 1} are needed for P = {P} orders.")
+    # Fourier coefficients (fftshift puts the zero harmonic in the center)
     A = np.fft.fftshift(np.fft.fft(eps_x)) / Nx
     p0 = Nx // 2
-    C = np.zeros((P, P), dtype=complex)
-    for r in range(P):
-        for c in range(P):
-            C[r, c] = A[p0 + (r - c)]
-    return C
+    idx = np.arange(P)
+    return A[p0 + (idx[:, None] - idx[None, :])].astype(complex)
 
 
 def convmat2d(eps, Px, Py):
-    """2B periyodik eps(x,y) profilinin konvolüsyon matrisi — Ders 2B & Kod 2B.
+    """Convolution matrix of a 2D periodic eps(x,y) profile — 2D Lesson & 2D Code.
 
-    eps : (Nx, Ny) karmaşık dizi, birim hücrede örneklenmiş dielektrik.
-    Px, Py : x ve y yönünde harmonik sayıları (ikisi de tek).
-    Döndürür: (Px*Py, Px*Py) matris. Mertebe sırası x-dış, y-iç (meshgrid 'ij').
+    eps : (Nx, Ny) complex array, dielectric sampled over the unit cell.
+    Px, Py : number of harmonics in the x and y directions (both odd).
+    Returns: (Px*Py, Px*Py) matrix. Order layout is x-outer, y-inner (meshgrid 'ij').
     """
+    eps = np.asarray(eps)
     Nx, Ny = eps.shape
+    if Px % 2 == 0 or Py % 2 == 0:
+        raise ValueError("Px and Py must be odd (2M+1).")
+    if Nx < 2 * Px - 1 or Ny < 2 * Py - 1:
+        raise ValueError(f"eps grid {Nx}x{Ny} is too coarse for {Px}x{Py} orders "
+                         f"(need at least {2 * Px - 1}x{2 * Py - 1} samples).")
     A = np.fft.fftshift(np.fft.fft2(eps)) / (Nx * Ny)
     p0, q0 = Nx // 2, Ny // 2
     Mx, My = Px // 2, Py // 2
     MX, MY = np.meshgrid(np.arange(-Mx, Mx + 1), np.arange(-My, My + 1), indexing='ij')
     MXf, MYf = MX.flatten(), MY.flatten()
-    P = Px * Py
-    C = np.zeros((P, P), dtype=complex)
-    for a in range(P):
-        for b in range(P):
-            C[a, b] = A[p0 + (MXf[a] - MXf[b]), q0 + (MYf[a] - MYf[b])]
-    return C
+    return A[p0 + (MXf[:, None] - MXf[None, :]), q0 + (MYf[:, None] - MYf[None, :])].astype(complex)
+
+
+def convmat2d_li(eps, Px, Py):
+    """Li-factorized convolution matrices of a 2D profile (Li 1997, "zigzag" rule).
+
+    Returns (ER, ERx, ERy):
+      ER  : plain Laurent matrix [[eps]]            -> used for Ez (tangential everywhere)
+      ERx : inverse rule along x, Laurent along y   -> multiplies Ex (normal to x-walls)
+      ERy : inverse rule along y, Laurent along x   -> multiplies Ey (normal to y-walls)
+    For axis-aligned (rectangular) features this is the correct Fourier factorization and
+    converges much faster than plain Laurent at high index contrast; for curved boundaries
+    it is an approximation that still improves on Laurent in most dielectric cases.
+    """
+    eps = np.asarray(eps, dtype=complex)
+    Nx, Ny = eps.shape
+    ER = convmat2d(eps, Px, Py)
+    inv_eps = 1.0 / eps
+    ix = np.arange(Px); iy = np.arange(Py)
+    dmx = ix[:, None] - ix[None, :]; dmy = iy[:, None] - iy[None, :]
+    # ERx: for every y-line, the 1D inverse-rule matrix along x; then Fourier transform along y
+    Ax = np.linalg.inv(np.stack([convmat1d(inv_eps[:, j], Px) for j in range(Ny)]))     # (Ny,Px,Px)
+    Fx = np.fft.fftshift(np.fft.fft(Ax, axis=0), axes=0) / Ny
+    Gx = Fx[Ny // 2 + dmy]                                    # [n,n',m,m']
+    ERx = Gx.transpose(2, 0, 3, 1).reshape(Px * Py, Px * Py)  # index (m,n),(m',n'), x-outer
+    # ERy: for every x-line, the 1D inverse-rule matrix along y; then Fourier transform along x
+    Ay = np.linalg.inv(np.stack([convmat1d(inv_eps[i, :], Py) for i in range(Nx)]))     # (Nx,Py,Py)
+    Fy = np.fft.fftshift(np.fft.fft(Ay, axis=0), axes=0) / Nx
+    Gy = Fy[Nx // 2 + dmx]                                    # [m,m',n,n']
+    ERy = Gy.transpose(0, 2, 1, 3).reshape(Px * Py, Px * Py)
+    return ER, ERx, ERy

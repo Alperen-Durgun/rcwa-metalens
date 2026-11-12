@@ -1,13 +1,12 @@
-"""Skaler 1B RCWA (TE/TM) + Li faktörizasyon kuralları — A2.
+"""Scalar 1D RCWA (TE/TM) + Li factorization rules — A2.
 
-1B (planar) grating için hafif, hızlı skaler çözücü. TM polarizasyonunda iki
-faktörizasyon kuralı: 'laurent' (standart) ve 'inverse' (Li 1996 ters kural).
-Ters kural yüksek-kontrast/metalik yapılarda TM yakınsamasını DRAMATİK hızlandırır
-(çok daha az mertebeyle doğru değer). Enerji korunumu (R+T=1) ile doğrulanmış;
-inverse rule, grcwa'nın yüksek nG'de bile yaklaşamadığı değere düşük M'de ulaşır.
+Lightweight, fast scalar solver for 1D (planar) gratings. Two factorization
+rules for TM polarization: 'laurent' (standard) and 'inverse' (Li 1996 inverse rule).
+The inverse rule DRAMATICALLY speeds up TM convergence for high-contrast/metallic
+structures (correct value with far fewer orders). Verified by energy conservation
+(R+T=1); the inverse rule reaches at low M the value grcwa cannot approach even at high nG.
 
-Kaynak: Li 1996 (inverse rule), Lalanne–Morris 1996 (TM yakınsama).
-Bkz. [[📚 RCWA ve Metalens Kaynakçası]], [[Kod Dersi 05 - Doğrulama ve Yakınsama]].
+References: Li 1996 (inverse rule), Lalanne–Morris 1996 (TM convergence).
 """
 import numpy as np
 from scipy.linalg import eig
@@ -31,27 +30,27 @@ def _modes(Om2, Vf):
 
 def solve_scalar_1d(lam0, theta_deg, er_ref, er_trn, period, eps_x, thickness, M,
                     pol="TE", rule="inverse", symmetric=False):
-    """Skaler 1B RCWA. pol='TE'|'TM'; rule='laurent'|'inverse' (TM için).
-    symmetric=True: normal geliş + ayna-simetrik hücrede çift-parite alt-uzayında
-    çözer (boyut ~yarı, eig ~3-4x hızlı, sonuç birebir aynı) — B6.
-    Döndürür: dict(Rtot, Ttot, R, T, orders)."""
+    """Scalar 1D RCWA. pol='TE'|'TM'; rule='laurent'|'inverse' (for TM).
+    symmetric=True: for normal incidence + a mirror-symmetric cell, solves in the
+    even-parity subspace (~half size, eig ~3-4x faster, identical result) — B6.
+    Returns: dict(Rtot, Ttot, R, T, orders)."""
     if symmetric:
         if abs(theta_deg) > 1e-9:
-            raise ValueError("symmetric=True yalnız normal gelişte (theta=0) geçerli.")
+            raise ValueError("symmetric=True is only valid at normal incidence (theta=0).")
         return _solve_scalar_1d_sym(lam0, er_ref, er_trn, period, eps_x, thickness, M, pol, rule)
     k0 = 2 * np.pi / lam0; n_ref = np.sqrt(er_ref); th = np.deg2rad(theta_deg)
     m = np.arange(-M, M + 1); P = 2 * M + 1
     kx = n_ref * np.sin(th) - m * (lam0 / period); KX = np.diag(kx.astype(complex))
     I = np.eye(P, dtype=complex)
     E = convmat1d(np.asarray(eps_x, complex), P)
-    Wg, Vg, _ = _modes(KX @ KX - I, I)               # gap (serbest uzay)
+    Wg, Vg, _ = _modes(KX @ KX - I, I)               # gap (free space)
     if pol == "TE":
         W, V, q = _modes(KX @ KX - E, I)
     else:
         Ei = np.linalg.inv(E); G = KX @ Ei @ KX - I
         if rule == "laurent":
             W, V, q = _modes(E @ G, Ei)
-        else:                                        # Li ters kural
+        else:                                        # Li inverse rule
             A = convmat1d(1.0 / np.asarray(eps_x, complex), P); Ai = np.linalg.inv(A)
             W, V, q = _modes(Ai @ G, A)
 
@@ -82,7 +81,7 @@ def solve_scalar_1d(lam0, theta_deg, er_ref, er_trn, period, eps_x, thickness, M
 
 
 def _parity_bases(M):
-    """Çift (Te: M+1 sütun) ve tek (To: M sütun) parite baz matrisleri."""
+    """Even (Te: M+1 columns) and odd (To: M columns) parity basis matrices."""
     P = 2 * M + 1
     Te = np.zeros((P, M + 1), dtype=complex); Te[M, 0] = 1.0
     To = np.zeros((P, M), dtype=complex)
@@ -93,7 +92,7 @@ def _parity_bases(M):
 
 
 def _solve_scalar_1d_sym(lam0, er_ref, er_trn, period, eps_x, thickness, M, pol, rule):
-    """B6: normal gelişte simetrik hücrede çift-parite indirgemesiyle çözüm."""
+    """B6: solution via even-parity reduction for a symmetric cell at normal incidence."""
     k0 = 2 * np.pi / lam0
     m = np.arange(-M, M + 1); P = 2 * M + 1; kx = -m * (lam0 / period)
     Te, To = _parity_bases(M); D = M + 1; I = np.eye(D, dtype=complex)

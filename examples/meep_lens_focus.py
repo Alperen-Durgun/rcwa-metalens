@@ -1,12 +1,12 @@
-"""MEEP 3B METALENS ODAK — sınırları zorlayan tam-dalga koşu (yerel FDTD).
-Gerçek D=6um TiO2 lensi 3B Meep FDTD ile çözer, odağı (FWHM) çıkarır ve
-RCWA + Tidy3D sonuçlarıyla karşılaştırır (üç-yönlü doğrulama).
+"""MEEP 3D METALENS FOCUS — a limit-pushing full-wave run (local FDTD).
+Solves a real D=6um TiO2 lens with 3D Meep FDTD, extracts the focus (FWHM) and
+compares it with the RCWA + Tidy3D results (three-way verification).
 
-Kullanım (WSL, mp ortamı; rcwa_py klasöründen):
+Usage (WSL, mp environment; from the repository root):
   $HOME/miniforge3/envs/mp/bin/python examples/meep_lens_focus.py <design.json> [resolution]
 
-Not: 3B FDTD ağırdır. resolution=15 orta; 20-25 zorlar. RAM'e göre seç.
-Bellek tahmini önce yazdırılır; kabul edersen çalışır.
+Note: 3D FDTD is heavy. resolution=15 is moderate; 20-25 is demanding. Choose according to your RAM.
+A memory estimate is printed first; the run starts after a short countdown.
 """
 import sys, os, json, time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,7 +14,7 @@ import numpy as np
 import meep as mp
 
 if len(sys.argv) < 2:
-    print("Kullanım: meep_lens_focus.py <design.json> [resolution]"); sys.exit(1)
+    print("Usage: meep_lens_focus.py <design.json> [resolution]"); sys.exit(1)
 design = json.load(open(sys.argv[1], encoding="utf-8"))
 resolution = int(sys.argv[2]) if len(sys.argv) > 2 else 15
 
@@ -27,16 +27,16 @@ z_lens = -sz/2 + dpml + 1.0 + H/2
 z_exit = z_lens + H/2
 rz = design.get("rcwa_focus_um"); rfw = design.get("rcwa_fwhm_nm")
 
-# bellek tahmini (kaba): voxel * ~6 alan bileşeni * 16 byte (karmaşık) + DFT/yardımcı
+# memory estimate (rough): voxels * ~6 field components * 16 bytes (complex) + DFT/auxiliary
 vox = (sx * resolution) * (sy * resolution) * (sz * resolution)
-mem_gb = vox * 260 / 1e9   # gerçekçi Meep tepe: ~260 byte/voxel (alanlar+geometri+DFT+aux)
-print(f"=== MEEP 3B LENS ODAK ===")
-print(f"Tasarım: {shape}/{design.get('material')}, {len(design['placements'])} sütun, D={D:.2f}um f={f}um")
-print(f"Hücre: {sx:.1f}x{sy:.1f}x{sz:.1f} um, çözünürlük={resolution} -> ~{vox/1e6:.1f}M voxel")
-print(f"KABA BELLEK TAHMİNİ: ~{mem_gb:.1f} GB (çok yüksekse Ctrl-C, düşük resolution ile tekrar)")
-print("5 sn içinde başlıyor...", flush=True); time.sleep(5)
+mem_gb = vox * 260 / 1e9   # realistic Meep peak: ~260 bytes/voxel (fields+geometry+DFT+aux)
+print(f"=== MEEP 3D LENS FOCUS ===")
+print(f"Design: {shape}/{design.get('material')}, {len(design['placements'])} pillars, D={D:.2f}um f={f}um")
+print(f"Cell: {sx:.1f}x{sy:.1f}x{sz:.1f} um, resolution={resolution} -> ~{vox/1e6:.1f}M voxels")
+print(f"ROUGH MEMORY ESTIMATE: ~{mem_gb:.1f} GB (if too high press Ctrl-C and retry with a lower resolution)")
+print("Starting in 5 s...", flush=True); time.sleep(5)
 
-# geometri
+# geometry
 geom = []
 for p in design["placements"]:
     s = p["params"] if np.iterable(p["params"]) else (p["params"],)
@@ -53,7 +53,7 @@ sim = mp.Simulation(cell_size=mp.Vector3(sx, sy, sz), boundary_layers=[mp.PML(dp
                     geometry=geom, sources=src, resolution=resolution,
                     force_complex_fields=True)
 
-# xz (y=0) DFT alan monitörü: lens çıkışından odağın ötesine
+# xz (y=0) DFT field monitor: from the lens exit to beyond the focus
 z0 = z_exit + 0.05; z1 = z_exit + 1.6 * f; zc = (z0 + z1) / 2; zspan = z1 - z0
 dft = sim.add_dft_fields([mp.Ex, mp.Ey, mp.Ez], f0, 0, 1,
                          center=mp.Vector3(0, 0, zc), size=mp.Vector3(sx, 0, zspan))
@@ -61,7 +61,7 @@ dft = sim.add_dft_fields([mp.Ex, mp.Ey, mp.Ez], f0, 0, 1,
 t0 = time.time()
 focus_pt = mp.Vector3(0, 0, z_exit + f)
 sim.run(until_after_sources=mp.stop_when_fields_decayed(5, mp.Ey, focus_pt, 1e-3))
-print(f"Meep koşu bitti: {time.time()-t0:.1f} s", flush=True)
+print(f"Meep run finished: {time.time()-t0:.1f} s", flush=True)
 
 Ex = sim.get_dft_array(dft, mp.Ex, 0)
 Ey = sim.get_dft_array(dft, mp.Ey, 0)
@@ -70,7 +70,7 @@ I = np.abs(Ex)**2 + np.abs(Ey)**2 + np.abs(Ez)**2      # (Nx, Nz)
 Nx, Nz = I.shape
 xs = np.linspace(-sx/2, sx/2, Nx); zs = np.linspace(z0, z1, Nz)
 
-# yakın-alanı dışla, eksende odağı bul
+# exclude the near field, find the focus on the axis
 win = zs >= z_exit + 0.4 * f
 ix0 = int(np.argmin(np.abs(xs)))
 iz = int(np.argmax(np.where(win, I[ix0, :], -np.inf)))
@@ -86,23 +86,23 @@ try:
     peak_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6  # Linux: kB -> GB
 except Exception:
     peak_gb = float("nan")
-print("\n=== SONUÇ (Meep 3B FDTD) ===")
-print(f"  [res={resolution}] tepe RAM ≈ {peak_gb:.2f} GB, süre = {time.time()-t0:.0f}s")
-print(f"  Odak uzaklığı f_Meep ≈ {f_meep:.2f} um (tasarım f={f})")
-print(f"  Odak x-tepe = {x_peak:+.2f} um (eksende olmalı ~0)")
-print(f"  FWHM = {fwhm:.0f} nm (difraksiyon sınırı λ/2NA={dl:.0f}nm)")
-if rz: print(f"  KIYAS RCWA(LPA): f≈{rz}um FWHM={rfw}nm  |  Meep(res={resolution}): f≈{f_meep:.2f}um FWHM={fwhm:.0f}nm")
+print("\n=== RESULT (Meep 3D FDTD) ===")
+print(f"  [res={resolution}] peak RAM ≈ {peak_gb:.2f} GB, time = {time.time()-t0:.0f}s")
+print(f"  Focal distance f_Meep ≈ {f_meep:.2f} um (design f={f})")
+print(f"  Focus x-peak = {x_peak:+.2f} um (should be on-axis ~0)")
+print(f"  FWHM = {fwhm:.0f} nm (diffraction limit λ/2NA={dl:.0f}nm)")
+if rz: print(f"  COMPARE RCWA(LPA): f≈{rz}um FWHM={rfw}nm  |  Meep(res={resolution}): f≈{f_meep:.2f}um FWHM={fwhm:.0f}nm")
 
 try:
     import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
     fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
     ax[0].imshow((I/I[:,win].max()).clip(0,1).T, origin="lower", aspect="auto",
                  extent=[xs[0], xs[-1], z0-z_exit, z1-z_exit], cmap="inferno", vmax=1)
-    ax[0].axhline(f_meep, color="c", ls="--"); ax[0].set_xlabel("x(um)"); ax[0].set_ylabel("lens çıkışından z(um)")
-    ax[0].set_title(f"Meep I(x,z) — odak f*≈{f_meep:.1f}um")
+    ax[0].axhline(f_meep, color="c", ls="--"); ax[0].set_xlabel("x(um)"); ax[0].set_ylabel("z from lens exit (um)")
+    ax[0].set_title(f"Meep I(x,z) — focus f*≈{f_meep:.1f}um")
     ax[1].plot(xs*1000, cut); ax[1].axhline(0.5, color="k", ls=":"); ax[1].set_xlim(-1500,1500)
-    ax[1].set_xlabel("x(nm)"); ax[1].set_ylabel("I/Imax"); ax[1].set_title(f"Odak kesiti FWHM={fwhm:.0f}nm"); ax[1].grid(alpha=.3)
+    ax[1].set_xlabel("x(nm)"); ax[1].set_ylabel("I/Imax"); ax[1].set_title(f"Focal cut FWHM={fwhm:.0f}nm"); ax[1].grid(alpha=.3)
     out = os.path.splitext(sys.argv[1])[0] + "_MEEP_focus.png"
-    fig.tight_layout(); fig.savefig(out, dpi=130); print(f"Figür: {out}")
+    fig.tight_layout(); fig.savefig(out, dpi=130); print(f"Figure: {out}")
 except Exception as e:
-    print("figür atlandı:", e)
+    print("figure skipped:", e)

@@ -1,5 +1,5 @@
-"""Otomatik testler — Kod Dersi 05.
-Çalıştır:  python tests/test_rcwa.py   (pytest de çalışır)
+"""Automated tests.
+Run:  python tests/test_rcwa.py   (pytest works too)
 """
 import numpy as np, sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -54,7 +54,7 @@ def test_materials():
     import numpy as np
     assert abs(np.sqrt(materials.eps_of("SiO2", 0.633)).real - 1.457) < 0.01
     assert abs(materials.eps_of("air", 0.633) - 1.0) < 1e-9
-    assert np.imag(np.sqrt(materials.eps_of("Si", 0.633))) > 0  # kayıp
+    assert np.imag(np.sqrt(materials.eps_of("Si", 0.633))) > 0  # loss
 
 
 def test_cache_computes_once():
@@ -88,9 +88,9 @@ def test_tm_inverse_rule():
     lo = solve_scalar_1d(0.55, 0, 1, 1, 1.0, eps, 0.25, 8, "TM", "laurent")
     hi = solve_scalar_1d(0.55, 0, 1, 1, 1.0, eps, 0.25, 8, "TM", "inverse")
     ref = solve_scalar_1d(0.55, 0, 1, 1, 1.0, eps, 0.25, 90, "TM", "inverse")["Ttot"]
-    # enerji korunumu
+    # energy conservation
     assert abs(hi["Rtot"] + hi["Ttot"] - 1) < 1e-6
-    # inverse rule düşük M'de referansa daha yakın
+    # the inverse rule is closer to the reference at low M
     assert abs(hi["Ttot"] - ref) < abs(lo["Ttot"] - ref)
 
 
@@ -98,12 +98,12 @@ def test_symmetry_reduction():
     from rcwa import solve_scalar_1d
     import numpy as np
     x = (np.arange(2048) + 0.5) / 2048
-    eps = np.where(np.minimum(x, 1 - x) < 0.25, 9.0, 1.0)  # x=0'da simetrik
+    eps = np.where(np.minimum(x, 1 - x) < 0.25, 9.0, 1.0)  # symmetric about x=0
     for pol in ("TE", "TM"):
         full = solve_scalar_1d(0.55, 0, 1, 1, 1.0, eps, 0.25, 40, pol, "inverse")
         sym = solve_scalar_1d(0.55, 0, 1, 1, 1.0, eps, 0.25, 40, pol, "inverse", symmetric=True)
-        assert abs(sym["Rtot"] + sym["Ttot"] - 1) < 1e-6       # enerji
-        assert abs(full["Ttot"] - sym["Ttot"]) < 1e-4          # birebir aynı
+        assert abs(sym["Rtot"] + sym["Ttot"] - 1) < 1e-6       # energy
+        assert abs(full["Ttot"] - sym["Ttot"]) < 1e-4          # identical
 
 
 
@@ -115,9 +115,9 @@ def test_convmat_correctness():
     duty, ehi, elo = 0.5, 4.0, 1.0
     eps = np.where(x < duty, ehi, elo)
     C = convmat1d(eps, 11)
-    # 0. Fourier katsayisi = ortalama eps
+    # 0th Fourier coefficient = mean eps
     assert abs(C[5, 5] - (duty * ehi + (1 - duty) * elo)) < 1e-3
-    # Toeplitz: C[i,j] sadece i-j'ye bagli
+    # Toeplitz: C[i,j] depends only on i-j
     assert abs(C[0, 1] - C[5, 6]) < 1e-9
 
 
@@ -136,11 +136,11 @@ def test_jones_isotropic_diagonal():
     import numpy as np
     L = 0.35; x = (np.arange(64) + 0.5) / 64 * L
     X, Y = np.meshgrid(x, x, indexing="ij")
-    eps = np.where((np.abs(X - L/2) < 0.09) & (np.abs(Y - L/2) < 0.09), 2.4**2, 1.0)  # kare (izotropik)
+    eps = np.where((np.abs(X - L/2) < 0.09) & (np.abs(Y - L/2) < 0.09), 2.4**2, 1.0)  # square (isotropic)
     rx = solve_rcwa_2d(0.633, 0, 0, 1, 1, L, L, [(eps, 0.6)], 6, 6, pol=(1., 0.))
     ry = solve_rcwa_2d(0.633, 0, 0, 1, 1, L, L, [(eps, 0.6)], 6, 6, pol=(0., 1.))
     txy = abs(ry["tx"][ry["i0"]]); tyx = abs(rx["ty"][rx["i0"]])
-    assert txy < 1e-3 and tyx < 1e-3   # capraz kutuplanma ~0
+    assert txy < 1e-3 and tyx < 1e-3   # cross-polarization ~0
 
 
 def test_regression_binary_grating():
@@ -149,7 +149,7 @@ def test_regression_binary_grating():
     x = (np.arange(1024) + 0.5) / 1024
     eps = np.where(x < 0.5, 4.0, 1.0).astype(complex)
     r = solve_rcwa_1d(0.55, 15.0, 1.0, 2.25, 1.2, [(eps, 0.3)], 81, pol=(0., 1.))
-    # kayitli referans deger (regresyon): 0.9180 (grcwa ile dogrulanmis)
+    # stored reference value (regression): 0.9180 (verified with grcwa)
     assert abs(r["Ttot"] - 0.9180) < 2e-3
 
 
@@ -165,13 +165,13 @@ def test_gds_roundtrip():
 
 
 def test_gds_unicode_path():
-    """Regresyon: gdstk Windows'ta Türkçe karakterli yola yazamaz; gds.py fallback
-    ile geçici dosyaya yazıp taşımalı. Yolda 'ş,ğ,ı,İ,ö,ç,ü' kullan."""
+    """Regression: gdstk cannot write to a path with non-ASCII characters on Windows;
+    gds.py must still succeed. Uses non-ASCII (Turkish) letters in the path on purpose."""
     from rcwa import gds
     import tempfile, os, shutil
-    base = os.path.join(tempfile.gettempdir(), "rcwa_Kişisel_çığ_İş_öçü")
+    base = os.path.join(tempfile.gettempdir(), "rcwa_Ki\u015fisel_\u00e7\u0131\u011f_\u0130\u015f_\u00f6\u00e7\u00fc")
     os.makedirs(base, exist_ok=True)
-    fp = os.path.join(base, "maske_şablon.gds")
+    fp = os.path.join(base, "maske_\u015fablon.gds")
     try:
         pl = [{"x": i*0.35, "y": j*0.35, "shape": "circle", "params": 0.2, "angle": 0} for i in range(2) for j in range(2)]
         n = gds.layout_to_gds(pl, fp)
@@ -182,16 +182,16 @@ def test_gds_unicode_path():
 
 
 def test_gdswriter_geometry():
-    """Saf-Python GDSII yazıcı: gdstk ile geri okunur + gdstk yazımıyla alan birebir."""
+    """Pure-Python GDSII writer: readable by gdstk + area identical to a gdstk-written file."""
     import gdstk, tempfile, os
     from rcwa import gds
     from rcwa.shapes import polygon
     pl = [{"x": i * 0.35, "y": j * 0.35, "shape": "circle", "params": 0.2, "angle": 0} for i in range(3) for j in range(3)]
     p = os.path.join(tempfile.gettempdir(), "pure_ut.gds")
-    n = gds.layout_to_gds(pl, p)                          # saf-Python yazıcı
-    polys = gdstk.read_gds(p).cells[0].polygons           # gdstk geri okur
+    n = gds.layout_to_gds(pl, p)                          # pure-Python writer
+    polys = gdstk.read_gds(p).cells[0].polygons           # gdstk reads it back
     a_pure = sum(abs(x.area()) for x in polys)
-    # referans: gdstk YAZ+OKU (aynı nm-yuvarlama) — adil kıyas
+    # reference: gdstk WRITE+READ (same nm rounding) — fair comparison
     pr = os.path.join(tempfile.gettempdir(), "ref_ut.gds")
     lib = gdstk.Library(unit=1e-6, precision=1e-9); c = lib.new_cell("R")
     for q in pl:
@@ -206,7 +206,7 @@ def test_materials_table():
     from rcwa import materials
     import numpy as np
     nk = materials.n_table("Au", 0.633)
-    assert np.real(nk) < 1.0 and np.imag(nk) > 2.0   # metal: küçük n, büyük k
+    assert np.real(nk) < 1.0 and np.imag(nk) > 2.0   # metal: small n, large k
     assert "TiO2_t" in materials.list_materials()
 
 
@@ -215,7 +215,7 @@ def test_shapes_fill():
     import numpy as np
     sq = (np.real(shapes.rasterize("square", 0.2, 0.35, 128)) > 1.5).mean()
     ci = (np.real(shapes.rasterize("circle", 0.2, 0.35, 128)) > 1.5).mean()
-    assert abs(ci / sq - np.pi / 4) < 0.05   # daire/kare ~ π/4
+    assert abs(ci / sq - np.pi / 4) < 0.05   # circle/square ~ π/4
 
 
 def test_metrics_strehl():
@@ -223,7 +223,7 @@ def test_metrics_strehl():
     import numpy as np
     N = 128; x = (np.arange(N) - N/2) * 0.05; X, Y = np.meshgrid(x, x, indexing="ij")
     I = np.exp(-(X**2 + Y**2) / (2*0.3**2))
-    assert abs(metrics.strehl(I, I) - 1.0) < 1e-9         # aynı -> Strehl=1
+    assert abs(metrics.strehl(I, I) - 1.0) < 1e-9         # identical -> Strehl=1
     assert metrics.focal_metrics(I, x)["fwhm_x"] > 0
 
 
@@ -234,18 +234,18 @@ def test_fullwave_bridge():
     pl = [{"x": (i-1)*0.35, "y": (j-1)*0.35, "params": 0.2, "angle": 0} for i in range(3) for j in range(3)]
     design = {"lam0": 0.633, "Lcell": 0.35, "height": 0.6, "n_pillar": 2.4,
               "shape": "circle", "D_lens": 2.0, "f": 4.0, "placements": pl}
-    g = fullwave.meep_geometry(design)           # saf python, her zaman çalışır
+    g = fullwave.meep_geometry(design)           # pure python, always works
     assert len(g) == 9 and g[0]["kind"] == "cylinder"
     try:
         import tidy3d  # noqa
         sim = fullwave.build_tidy3d(design)
         assert len(sim.structures[0].geometry.geometries) == 9 and len(sim.monitors) == 1
     except ImportError:
-        pass  # tidy3d opsiyonel
+        pass  # tidy3d is optional
 
 
 def test_adjoint_gradient():
-    """E1: adjoint (autodiff) gradyanı sonlu-farkla örtüşmeli."""
+    """E1: the adjoint (autodiff) gradient must match finite differences."""
     from rcwa import adjoint
     cfg = dict(nG=25, Lx=0.4, Ly=0.4, Nx=6, Ny=6, lam=0.633, thick=0.3, eps_hi=4.0 + 0.2j, eps_lo=1.0)
     ga, gfd, diff = adjoint.fd_grad_check(cfg)
@@ -253,7 +253,7 @@ def test_adjoint_gradient():
 
 
 def test_adjoint_improves():
-    """E1: Adam optimizasyonu absorpsiyonu artırmalı."""
+    """E1: Adam optimization must increase the absorption."""
     from rcwa import adjoint
     cfg = dict(nG=25, Lx=0.4, Ly=0.4, Nx=6, Ny=6, lam=0.633, thick=0.3, eps_hi=4.0 + 0.2j, eps_lo=1.0)
     r = adjoint.optimize_absorber(cfg, steps=20, lr=0.08)
@@ -261,7 +261,7 @@ def test_adjoint_improves():
 
 
 def test_hiacc2d_dielectric_matches():
-    """E3: dielektrikte grcwa yüksek-doğruluk backend'i native Laurent ile örtüşür."""
+    """E3: for dielectrics the grcwa high-accuracy backend matches native Laurent."""
     import numpy as np
     from rcwa import hiacc2d
     from rcwa import solve_rcwa_2d
@@ -274,7 +274,7 @@ def test_hiacc2d_dielectric_matches():
 
 
 def test_hiacc2d_metal_physical_and_advice():
-    """E3: metalde grcwa fiziksel (R+T<=1) + öneri grcwa'yı işaret eder."""
+    """E3: for metals grcwa is physical (R+T<=1) + the advice points to grcwa."""
     import numpy as np
     from rcwa import hiacc2d
     L = 0.3; x = (np.arange(48) + 0.5) / 48 * L; X, Y = np.meshgrid(x, x, indexing="ij")
@@ -285,18 +285,18 @@ def test_hiacc2d_metal_physical_and_advice():
 
 
 def test_hex_lattice_energy():
-    """E4: altıgen (non-ortogonal) kafes, kayıpsız dielektrikte ΣDE≈1."""
+    """E4: hexagonal (non-orthogonal) lattice, ΣDE≈1 for a lossless dielectric."""
     import numpy as np
     from rcwa import hiacc2d
     L1, L2 = hiacc2d.hex_lattice(0.4); N = 48
     x = (np.arange(N) + 0.5) / N; X, Y = np.meshgrid(x, x, indexing="ij")
     eps = np.where(((X - .5)**2 + (Y - .5)**2) < 0.18**2, 2.4**2, 1.0)
     r = hiacc2d.solve_2d_lattice(0.633, 0, 0, 1, 1, L1, L2, eps, 0.6, nG=110)
-    assert abs(r["Rtot"] + r["Ttot"] - 1.0) < 0.02 and r["lattice"] == "non-ortogonal"
+    assert abs(r["Rtot"] + r["Ttot"] - 1.0) < 0.02 and r["lattice"] == "non-orthogonal"
 
 
 def test_materials_yaml_sellmeier():
-    """E7: RI.info Sellmeier YAML içe aktarımı (SiO2 n@633≈1.457)."""
+    """E7: RI.info Sellmeier YAML import (SiO2 n@633≈1.457)."""
     import tempfile, os
     from rcwa import materials as Mt
     yml = ("DATA:\n  - type: formula 1\n    coefficients: 0 0.6961663 0.0684043 "
@@ -308,7 +308,7 @@ def test_materials_yaml_sellmeier():
 
 
 def test_exporting_bsdf_drc():
-    """E8: BSDF mertebe tablosu + DRC ihlal yakalama."""
+    """E8: BSDF order table + DRC violation detection."""
     import numpy as np
     from rcwa import exporting as X
     from rcwa import solve_rcwa_2d
@@ -324,7 +324,7 @@ def test_exporting_bsdf_drc():
 
 
 def test_pipeline_tiling_zemax():
-    """E5/E6: kutucuklama sütun korur; Zemax faz CSV NA doğru."""
+    """E5/E6: tiling preserves the pillars; Zemax phase CSV has the correct NA."""
     import tempfile, os
     from rcwa import pipeline as P
     pl = [{"x": i * 0.35, "y": j * 0.35, "params": 0.2, "angle": 0} for i in range(6) for j in range(6)]
@@ -338,7 +338,7 @@ def test_pipeline_tiling_zemax():
 
 
 def test_metrics_professional():
-    """Profesyonel metrikler: verim tanımları, kuşatılmış enerji, yan-lob, DOF, 2B MTF, grup gecikmesi."""
+    """Professional metrics: efficiency definitions, encircled energy, sidelobe, DOF, 2D MTF, group delay."""
     from rcwa import metrics
     import numpy as np
     xc = (np.arange(256) - 128) * 0.03; X, Y = np.meshgrid(xc, xc, indexing="ij"); sig = 0.3
@@ -346,7 +346,7 @@ def test_metrics_professional():
     es = metrics.efficiency_suite(I, xc, fwhm, P_incident=I.sum() * 1.25)
     assert abs(es["absolute"] - 0.8) < 0.02 and 0.99 < es["relative"] <= 1.001
     assert abs(metrics.encircled_energy(I, xc, 0.8) - 1.794 * sig) < 0.05
-    assert metrics.sidelobe_level(I[:, 128])["ratio"] < 0.05          # saf Gauss -> yan-lob yok
+    assert metrics.sidelobe_level(I[:, 128])["ratio"] < 0.05          # pure Gaussian -> no sidelobe
     z = np.linspace(-5, 5, 201); Iz = np.exp(-z**2 / 2)
     assert abs(metrics.depth_of_focus(Iz, z) - 2.3548) < 0.1
     mt = metrics.mtf_2d(I); assert abs(mt[0] - 1.0) < 1e-9 and abs(metrics.strehl_mtf(mt, mt) - 1.0) < 1e-9
@@ -355,7 +355,7 @@ def test_metrics_professional():
 
 
 def test_largelens_vectorized():
-    """E6: büyük-lens vektörize seçim + LUT, argmin seçimiyle birebir örtüşür."""
+    """E6: large-lens vectorized selection + LUT matches the argmin selection exactly."""
     from rcwa import largelens as LL
     import numpy as np
     st = LL.design_large_lens(0.633, 0.35, 0.60, "TiO2_t", "circle", 8.0, 10.0, 7, gds_dir=None)
@@ -368,7 +368,7 @@ def test_largelens_vectorized():
 
 
 def test_backends_available():
-    """E2: backend seçici çökme olmadan çalışır ve autograd'ı bildirir."""
+    """E2: the backend picker runs without crashing and reports autograd."""
     from rcwa import backends
     av = backends.available()
     assert av["autograd"] is True
@@ -376,36 +376,137 @@ def test_backends_available():
     assert gb in ("jax", "autograd")
 
 
-if __name__ == "__main__":
-    test_fresnel_match(); print("test_fresnel_match: GEÇTİ")
-    test_energy_conservation(); print("test_energy_conservation: GEÇTİ")
-    test_energy_conservation_2d(); print("test_energy_conservation_2d: GEÇTİ")
-    test_materials(); print("test_materials: GEÇTİ")
-    test_cache_computes_once(); print("test_cache_computes_once: GEÇTİ")
-    test_solve_1d_auto_stable(); print("test_solve_1d_auto_stable: GEÇTİ")
-    test_tm_inverse_rule(); print("test_tm_inverse_rule: GEÇTİ")
-    test_symmetry_reduction(); print("test_symmetry_reduction: GEÇTİ")
-    test_convmat_correctness(); print("test_convmat_correctness: GEÇTİ")
-    test_convergence_energy_stable(); print("test_convergence_energy_stable: GEÇTİ")
-    test_jones_isotropic_diagonal(); print("test_jones_isotropic_diagonal: GEÇTİ")
-    test_regression_binary_grating(); print("test_regression_binary_grating: GEÇTİ")
-    test_gds_roundtrip(); print("test_gds_roundtrip: GEÇTİ")
-    test_gds_unicode_path(); print("test_gds_unicode_path: GEÇTİ")
-    test_gdswriter_geometry(); print("test_gdswriter_geometry: GEÇTİ")
-    test_materials_table(); print("test_materials_table: GEÇTİ")
-    test_shapes_fill(); print("test_shapes_fill: GEÇTİ")
-    test_metrics_strehl(); print("test_metrics_strehl: GEÇTİ")
-    test_fullwave_bridge(); print("test_fullwave_bridge: GEÇTİ")
-    test_adjoint_gradient(); print("test_adjoint_gradient: GEÇTİ")
-    test_adjoint_improves(); print("test_adjoint_improves: GEÇTİ")
-    test_hiacc2d_dielectric_matches(); print("test_hiacc2d_dielectric_matches: GEÇTİ")
-    test_hiacc2d_metal_physical_and_advice(); print("test_hiacc2d_metal_physical_and_advice: GEÇTİ")
-    test_hex_lattice_energy(); print("test_hex_lattice_energy: GEÇTİ")
-    test_materials_yaml_sellmeier(); print("test_materials_yaml_sellmeier: GEÇTİ")
-    test_exporting_bsdf_drc(); print("test_exporting_bsdf_drc: GEÇTİ")
-    test_pipeline_tiling_zemax(); print("test_pipeline_tiling_zemax: GEÇTİ")
-    test_metrics_professional(); print("test_metrics_professional: GEÇTİ")
-    test_largelens_vectorized(); print("test_largelens_vectorized: GEÇTİ")
-    test_backends_available(); print("test_backends_available: GEÇTİ")
-    print("Tüm testler geçti ✅")
+def test_phase_convention_slab():
+    """Solver amplitudes are exp(+jwt): the transmission phase DECREASES with optical
+    thickness; physical_phase flips it (grows with delay). Locks the convention."""
+    from rcwa import solve_rcwa_2d, physical_phase
+    lam = 0.633; out = {}
+    for d in (0.02, 0.04):
+        r1 = solve_rcwa_1d(lam, 0, 1, 1, 0.3, [(np.full(64, 2.25, complex), d)], 5, pol=(0., 1.))
+        r2 = solve_rcwa_2d(lam, 0, 0, 1, 1, 0.3, 0.3, [(np.full((16, 16), 2.25), d)], 1, 1, pol=(0., 1.))
+        out[d] = (r1["ty"][r1["zeroth_index"]], r2["ty"][r2["i0"]])
+    for k in (0, 1):
+        assert np.angle(out[0.04][k]) < np.angle(out[0.02][k]) < 0
+        assert physical_phase(out[0.04][k]) > physical_phase(out[0.02][k]) > 0
+    assert abs(out[0.04][0] - out[0.04][1]) < 1e-6      # 1D and 2D share one convention
 
+
+def test_lens_1d_physical_focus():
+    """Full super-cell solve of a 1D metalens: the PHYSICAL-convention (negated) library
+    focuses near f; using the raw solver phase gives a diverging lens (no focus)."""
+    from rcwa import solve_1d_auto
+    from rcwa.convention import propagate_orders_1d
+    lam, Lc, H, n = 0.633, 0.35, 0.6, 2.4
+    Dl, f, guard = 3.5, 5.0, 3.0
+    N = int(round(Dl / Lc)); Dl = N * Lc; D = Dl + 2 * guard; X0 = D / 2
+    ws = np.linspace(0.04, Lc - 0.04, 60); ph = []
+    for w in ws:
+        x = (np.arange(256) + 0.5) / 256 * Lc
+        e = np.where(np.abs(x - Lc / 2) < w / 2, n * n, 1.0).astype(complex)
+        r = solve_rcwa_1d(lam, 0, 1, 1, Lc, [(e, H)], 21, pol=(0., 1.))
+        ph.append(np.angle(r["ty"][r["zeroth_index"]]))
+    ph = np.unwrap(np.array(ph)); ph -= ph.min()
+    xc = (np.arange(N) + 0.5) * Lc - Dl / 2
+    phi = np.mod(-(2 * np.pi / lam) * (np.sqrt(xc ** 2 + f ** 2) - f), 2 * np.pi)
+    xg = (np.arange(4096) + 0.5) / 4096 * D; zc = np.linspace(2.5, 8.0, 56); peak = {}
+    for sgn in (-1, +1):
+        phm = np.mod(sgn * ph, 2 * np.pi)
+        ch = np.array([ws[np.argmin(np.abs(np.angle(np.exp(1j * (phm - p)))))] for p in phi])
+        col = np.ones(4096)
+        for i in range(N):
+            col[np.abs(xg - (X0 + xc[i])) < ch[i] / 2] = n * n
+        res = solve_1d_auto(lam, 0, 1, 1, D, [(col.astype(complex), H)], 60, M_list=[60, 70])
+        Iax = np.array([abs(propagate_orders_1d(res, lam, D, X0, z)[0]) ** 2 for z in zc])
+        peak[sgn] = (Iax.max(), zc[int(np.argmax(Iax))])
+    assert peak[-1][0] > 3.5 and abs(peak[-1][1] - f) < 1.0     # focuses near the design focal length
+    assert peak[+1][0] < 0.6 * peak[-1][0]                      # raw solver phase: no comparable focus
+
+
+def test_fwhm_interpolated():
+    """fwhm_1d is sub-grid accurate and ignores sidelobes."""
+    from rcwa import metrics
+    x = np.linspace(-3, 3, 41); g = np.exp(-x ** 2 / (2 * 0.5 ** 2))       # coarse grid (dx=0.15)
+    assert abs(metrics.fwhm_1d(g, x) - 2.3548 * 0.5) < 0.02
+    g2 = g + 0.7 * np.exp(-(x - 2.4) ** 2 / (2 * 0.1 ** 2))                 # strong sidelobe
+    assert abs(metrics.fwhm_1d(g2, x) - 2.3548 * 0.5) < 0.05
+
+
+def test_hiacc2d_oblique_angle_units():
+    """E3: solve_2d_grcwa takes DEGREES — an oblique uniform slab matches the native solver."""
+    from rcwa import hiacc2d, solve_rcwa_2d
+    eps = np.full((16, 16), 2.25); L = 0.3
+    rn = solve_rcwa_2d(0.633, 30.0, 0, 1, 1, L, L, [(eps, 0.25)], 1, 1, pol=(0., 1.))     # TE
+    rg = hiacc2d.solve_2d_grcwa(0.633, 30.0, 0, 1, 1, L, L, eps, 0.25, nG=9, pol=(0.0, 1.0))  # s
+    assert abs(rn["Rtot"] - rg["Rtot"]) < 2e-3 and abs(rn["Ttot"] - rg["Ttot"]) < 2e-3
+
+
+def test_result_keys_consistent():
+    """1D and 2D results expose the same zeroth-order keys."""
+    from rcwa import solve_rcwa_2d
+    r1 = solve_rcwa_1d(0.55, 0, 1, 1, 0.3, [(np.full(32, 2.25, complex), 0.1)], 3)
+    r2 = solve_rcwa_2d(0.55, 0, 0, 1, 1, 0.3, 0.3, [(np.full((8, 8), 2.25), 0.1)], 1, 1)
+    for r in (r1, r2):
+        assert r["i0"] == r["zeroth_index"] and all(k in r for k in ("tx", "ty", "rx", "ry"))
+
+
+def test_convmat_vectorized_matches_definition():
+    """convmat1d/2d equal the element-wise definition C[a,b] = eps_{a-b}; coarse grids are rejected."""
+    from rcwa import convmat1d, convmat2d
+    rng = np.random.default_rng(0)
+    e1 = rng.uniform(1, 4, 32); P = 7; A = np.fft.fftshift(np.fft.fft(e1)) / 32
+    C = convmat1d(e1, P)
+    assert all(abs(C[r, c] - A[16 + r - c]) < 1e-14 for r in range(P) for c in range(P))
+    e2 = rng.uniform(1, 4, (16, 12)); A2 = np.fft.fftshift(np.fft.fft2(e2)) / (16 * 12)
+    C2 = convmat2d(e2, 3, 5)
+    idx = [(m, n) for m in range(-1, 2) for n in range(-2, 3)]
+    assert all(abs(C2[a, b] - A2[8 + idx[a][0] - idx[b][0], 6 + idx[a][1] - idx[b][1]]) < 1e-14
+               for a in range(15) for b in range(15))
+    for bad in (lambda: convmat1d(e1, 21), lambda: convmat2d(e2, 9, 9)):
+        try:
+            bad(); raise AssertionError("coarse grid must raise")
+        except ValueError:
+            pass
+
+
+def test_vector_1d_tm_uses_inverse_rule():
+    """The full-vector 1D solver applies Li's rule: TM at high contrast converges far faster
+    than plain Laurent, and TE is untouched."""
+    from rcwa import solve_scalar_1d
+    x = (np.arange(2048) + 0.5) / 2048; eps = np.where(x < 0.5, 9.0, 1.0)
+    ref = solve_scalar_1d(0.55, 0, 1, 1, 1.0, eps, 0.25, 100, "TM", "inverse")["Ttot"]
+    li = solve_rcwa_1d(0.55, 0, 1, 1, 1.0, [(eps, 0.25)], 21, pol=(1., 0.))["Ttot"]
+    la = solve_rcwa_1d(0.55, 0, 1, 1, 1.0, [(eps, 0.25)], 21, pol=(1., 0.), rule="laurent")["Ttot"]
+    assert abs(li - ref) < 1e-3 and abs(li - ref) < 0.3 * abs(la - ref)
+    te = [solve_rcwa_1d(0.55, 0, 1, 1, 1.0, [(eps, 0.25)], 21, pol=(0., 1.), rule=r)["Ttot"]
+          for r in ("inverse", "laurent")]
+    assert abs(te[0] - te[1]) < 1e-12
+
+
+def test_2d_li_factorization_converges_faster():
+    """2D: with Li's factorization a low order count is already close to the converged phase;
+    plain Laurent at the same order count is several times further away. Energy is conserved."""
+    from rcwa import solve_rcwa_2d, shapes
+    e = shapes.rasterize("square", 0.20, 0.35, 256, n_pillar=2.52)
+    def t0(M, rule):
+        r = solve_rcwa_2d(0.633, 0, 0, 1, 1, 0.35, 0.35, [(e, 0.6)], M, M, pol=(0., 1.), rule=rule)
+        assert abs(r["Rtot"] + r["Ttot"] - 1) < 1e-6
+        return r["ty"][r["i0"]]
+    ref = t0(7, "li"); li = t0(3, "li"); la = t0(3, "laurent")
+    assert abs(np.angle(li / ref)) < 0.05 and abs(np.angle(la / ref)) > 2 * abs(np.angle(li / ref))
+
+
+def test_rasterize_resolution_and_fill():
+    """Fine rasters reproduce the analytic fill factor; aa returns area-weighted values."""
+    from rcwa import shapes
+    L, s = 0.35, 0.2
+    fill = (np.real(shapes.rasterize("circle", s, L, shapes.DEFAULT_N)) > 1.5).mean()
+    assert abs(fill - np.pi * (s / 2) ** 2 / L ** 2) < 2e-3
+    aa = np.real(shapes.rasterize("circle", s, L, 32, n_pillar=2.0, aa=8))
+    assert aa.shape == (32, 32) and abs((aa.mean() - 1.0) / 3.0 - np.pi * (s / 2) ** 2 / L ** 2) < 2e-3
+
+
+if __name__ == "__main__":
+    _tests = [(k, v) for k, v in list(globals().items()) if k.startswith("test_") and callable(v)]
+    for _name, _fn in _tests:
+        _fn(); print(f"{_name}: PASSED")
+    print(f"All {len(_tests)} tests passed ✅")

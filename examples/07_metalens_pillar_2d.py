@@ -1,7 +1,7 @@
-"""Örnek 7 — 2B meta-atom faz kütüphanesi (gerçek metalens birim hücresi).
-Kare kesitli nano-sütunun kenarını tarayıp 0. mertebe geçiş fazını/genliğini
-çıkarır. 2B = gerçek metalens (x-y'de sütun). Grafik Simulasyonlar/'a kaydedilir.
-Çalıştır: python examples/07_metalens_pillar_2d.py
+"""Example 7 — 2D meta-atom phase library (a real metalens unit cell).
+Sweeps the side of a square nano-pillar and extracts the 0th-order transmission
+phase/amplitude. 2D = a real metalens (pillar in x-y). The plot is saved to Simulasyonlar/.
+Run: python examples/07_metalens_pillar_2d.py
 """
 import numpy as np, sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,13 +19,13 @@ for s in sides:
     r = solve_rcwa_2d(lam0, 0, 0, 1.0, 1.0, L, L, [(eps, H)], M, M, pol=(0., 1.))
     t0 = r['ty'][r['i0']]; phase.append(np.angle(t0)); amp.append(np.abs(t0))
 phase = np.unwrap(np.array(phase)); phase -= phase[0]; amp = np.array(amp)
-print(f"2B meta-atom: faz kapsaması {np.ptp(phase)/np.pi:.2f}π, ort. genlik {amp.mean():.3f}")
+print(f"2D meta-atom: phase coverage {np.ptp(phase)/np.pi:.2f}π, mean amplitude {amp.mean():.3f}")
 
 fig, ax = plt.subplots(1, 2, figsize=(10, 4))
-ax[0].plot(sides*1000, phase/np.pi, 'o-'); ax[0].set_xlabel("Sütun kenarı (nm)")
-ax[0].set_ylabel("Faz (π)"); ax[0].set_title("2B faz kütüphanesi"); ax[0].grid(True, alpha=.3)
-ax[1].plot(sides*1000, amp, 's-', color='C1'); ax[1].set_xlabel("Sütun kenarı (nm)")
-ax[1].set_ylabel("|t0|"); ax[1].set_ylim(0, 1.05); ax[1].set_title("Genlik"); ax[1].grid(True, alpha=.3)
-fig.suptitle(f"2B meta-atom (λ={lam0}, Λ={L}, H={H}, n={n_pillar})"); fig.tight_layout()
-out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "Simulasyonlar", "meta_atom_2b_faz_kutuphanesi.png"))
-fig.savefig(out, dpi=130); print("Grafik ->", out)
+ax[0].plot(sides*1000, phase/np.pi, 'o-'); ax[0].set_xlabel("Pillar side (nm)")
+ax[0].set_ylabel("Phase (π)"); ax[0].set_title("2D phase library"); ax[0].grid(True, alpha=.3)
+ax[1].plot(sides*1000, amp, 's-', color='C1'); ax[1].set_xlabel("Pillar side (nm)")
+ax[1].set_ylabel("|t0|"); ax[1].set_ylim(0, 1.05); ax[1].set_title("Amplitude"); ax[1].grid(True, alpha=.3)
+fig.suptitle(f"2D meta-atom (λ={lam0}, Λ={L}, H={H}, n={n_pillar})"); fig.tight_layout()
+out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "Simulasyonlar", "meta_atom_2d_phase_library.png"))
+fig.savefig(out, dpi=130); print("Plot ->", out)

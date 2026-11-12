@@ -1,7 +1,7 @@
-"""Örnek 6 — 2B doğrulama: solve_rcwa_2d vs grcwa.
-Kare latiste dielektrik sütun; toplam R/T ve enerji korunumu karşılaştırılır.
-Kurulum:  pip install grcwa autograd
-Çalıştır: python examples/06_grating2d_grcwa.py
+"""Example 6 — 2D validation: solve_rcwa_2d vs grcwa.
+Dielectric pillar on a square lattice; total R/T and energy conservation are compared.
+Install:  pip install grcwa autograd
+Run:      python examples/06_grating2d_grcwa.py
 """
 import numpy as np, sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -9,7 +9,7 @@ from rcwa import solve_rcwa_2d
 try:
     import grcwa; grcwa.set_backend('numpy')
 except ImportError:
-    print("grcwa kurulu değil: pip install grcwa autograd"); sys.exit(1)
+    print("grcwa is not installed: pip install grcwa autograd"); sys.exit(1)
 
 lam0, Lx, Ly, d = 0.55, 1.0, 1.0, 0.30
 er_ref, er_trn, eps_hi, eps_lo, side = 1.0, 2.25, 4.0, 1.0, 0.5
@@ -21,7 +21,7 @@ def eps_grid(N):
     e[(np.abs(X - Lx/2) < side/2) & (np.abs(Y - Ly/2) < side/2)] = eps_hi
     return e
 
-print("=== 2B: rcwa_py vs grcwa (kare sütun, normal geliş) ===\n")
+print("=== 2D: rcwa_py vs grcwa (square pillar, normal incidence) ===\n")
 eN = eps_grid(120)
 for M in (5, 7, 9):
     m = solve_rcwa_2d(lam0, 0, 0, er_ref, er_trn, Lx, Ly, [(eN, d)], M, M, pol=(0., 1.))
@@ -33,4 +33,4 @@ obj.Init_Setup(); obj.GridLayer_geteps(eps_grid(120).flatten())
 obj.MakeExcitationPlanewave(0., 0., 1., 0., order=0)
 R, T = obj.RT_Solve(normalize=1)
 print(f"grcwa   nG=225: Rtot={float(R):.5f} Ttot={float(T):.5f} ΣDE={float(R)+float(T):.5f}")
-print(f"\n|fark| (M=9): {abs(m['Rtot']-float(R)):.2e}  -> ✅" if abs(m['Rtot']-float(R))<2e-3 else "⚠️")
+print(f"\n|diff| (M=9): {abs(m['Rtot']-float(R)):.2e}  -> ✅" if abs(m['Rtot']-float(R))<2e-3 else "⚠️")

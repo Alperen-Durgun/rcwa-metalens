@@ -1,8 +1,8 @@
-"""Dispersif malzeme kütüphanesi — A3.
+"""Dispersive material library — A3.
 
-Dalga boyuna bağlı kırılma indisi n(λ) ve soğurma k (kayıp). eps = (n + ik)^2.
-λ mikron (um) cinsinden. Basit Sellmeier/tablolar; gerektikçe genişlet.
-Kaynak değerleri yaklaşık literatür; kesin iş için ölçülü tablolarla değiştir.
+Wavelength-dependent refractive index n(λ) and absorption k (loss). eps = (n + ik)^2.
+λ is in microns (um). Simple Sellmeier/tables; extend as needed.
+Source values are approximate literature; replace with measured tables for precise work.
 """
 import numpy as np
 
@@ -11,41 +11,41 @@ def _sellmeier(lam, B, C):
     n2 = 1.0 + sum(b * l2 / (l2 - c) for b, c in zip(B, C))
     return np.sqrt(n2)
 
-# Yaklaşık modeller (görünür bölge)
-def n_SiO2(lam):   # erimiş silika (Malitson)
+# Approximate models (visible region)
+def n_SiO2(lam):   # fused silica (Malitson)
     return _sellmeier(lam, [0.6961663, 0.4079426, 0.8974794],
                       [0.0684043**2, 0.1162414**2, 9.896161**2])
 
-def n_TiO2(lam):   # TiO2 (yaklaşık, görünür) — n~2.4 civarı
+def n_TiO2(lam):   # TiO2 (approx., visible) — n~2.4 range
     return np.sqrt(5.913 + 0.2441 / (lam ** 2 - 0.0803))
 
-def n_Si(lam):     # kristal Si (yaklaşık); görünürde soğurmalı
+def n_Si(lam):     # crystalline Si (approx.); absorbing in the visible
     n = 3.42 + 0.09 / (lam ** 2)
-    k = np.where(lam < 0.5, 0.2, 0.02)   # kaba kayıp
+    k = np.where(lam < 0.5, 0.2, 0.02)   # coarse loss
     return n + 1j * k
 
-def n_Ag(lam):     # gümüş (kaba Drude yaklaşımı, metal — yüksek kayıp)
-    # sadece niteliksel; kesin iş için Johnson&Christy tablosu kullan
+def n_Ag(lam):     # silver (coarse Drude approximation, metal — high loss)
+    # qualitative only; use the Johnson & Christy table for precise work
     eps = 5.0 - (9.2 ** 2) / ((1.2398 / lam) * ((1.2398 / lam) + 1j * 0.02))
     return np.sqrt(eps + 0j)
 
 MATERIALS = {"SiO2": n_SiO2, "TiO2": n_TiO2, "Si": n_Si, "Ag": n_Ag, "air": lambda lam: 1.0 + 0j}
 
 def eps_of(material, lam):
-    """Malzemenin λ'daki karmaşık eps'i. material: isim ya da sabit n."""
+    """Complex eps of the material at λ. material: a name or a constant n."""
     if isinstance(material, (int, float, complex)):
         return complex(material) ** 2
     n = MATERIALS[material](lam)
     return np.asarray(n) ** 2
 
 
-# --- Ölçülü n,k tablo desteği (Madde 3) ---
+# --- Measured n,k table support (Item 3) ---
 import os as _os
 _DATA_DIR = _os.path.join(_os.path.dirname(__file__), "materials_data")
 _TABLES = {}
 
 def load_nk_csv(path):
-    """refractiveindex.info benzeri CSV: satırlar 'wavelength_um,n,k'. (# yorum)."""
+    """refractiveindex.info-like CSV: rows 'wavelength_um,n,k'. (# comment)."""
     wl, n, k = [], [], []
     with open(path) as f:
         for line in f:
@@ -73,12 +73,12 @@ def _load_builtin_tables():
 _load_builtin_tables()
 
 def n_table(name, lam):
-    """Tablodan λ'da karmaşık kırılma indisi (n+ik), lineer interpolasyon."""
+    """Complex refractive index (n+ik) at λ from the table, linear interpolation."""
     wl, n, k = _TABLES[name]
     nn = np.interp(lam, wl, n); kk = np.interp(lam, wl, k)
     return nn + 1j * kk
 
-# eps_of'u tablo isimlerini de tanıyacak şekilde genişlet
+# extend eps_of to also recognize table names
 _eps_of_base = eps_of
 def eps_of(material, lam):  # noqa: F811
     if isinstance(material, str) and material in _TABLES:
@@ -89,10 +89,10 @@ def list_materials():
     return sorted(list(MATERIALS.keys()) + list(_TABLES.keys()))
 
 
-# --- E7: refractiveindex.info YAML içe aktarma + geniş-bant + anizotropik ---
+# --- E7: refractiveindex.info YAML import + broadband + anisotropic ---
 def sellmeier_formula(lam, coeffs, formula=1):
-    """refractiveindex.info Sellmeier (formula 1/2). coeffs: [C1,C2,...] (RI.info sırası).
-    formula 1: n^2 = 1 + Σ Ci λ^2/(λ^2 - C(i+1)^2). λ mikron."""
+    """refractiveindex.info Sellmeier (formula 1/2). coeffs: [C1,C2,...] (RI.info order).
+    formula 1: n^2 = 1 + Σ Ci λ^2/(λ^2 - C(i+1)^2). λ in microns."""
     l2 = lam ** 2; n2 = 1.0 + coeffs[0]
     it = iter(coeffs[1:])
     for b in it:
@@ -105,8 +105,8 @@ def sellmeier_formula(lam, coeffs, formula=1):
 
 
 def load_nk_yaml(path):
-    """refractiveindex.info .yml dosyasını içe aktar. 'tabulated nk/n' veya
-    'formula' (Sellmeier) destekler. Döndürür: ('table',wl,n,k) ya da ('formula',fn)."""
+    """Import a refractiveindex.info .yml file. Supports 'tabulated nk/n' or
+    'formula' (Sellmeier). Returns: ('table',wl,n,k) or ('formula',fn)."""
     import yaml
     with open(path, encoding="utf-8") as f:
         doc = yaml.safe_load(f)
@@ -121,11 +121,11 @@ def load_nk_yaml(path):
         if t.startswith("formula"):
             formula = int(t.split()[1]); coeffs = [float(v) for v in blk["coefficients"].split()]
             return ("formula", lambda lam, c=coeffs, fm=formula: sellmeier_formula(lam, c, fm))
-    raise ValueError("YAML içinde tabulated/formula DATA bulunamadı")
+    raise ValueError("no tabulated/formula DATA found in YAML")
 
 
 def register_yaml(name, path):
-    """Bir refractiveindex.info YAML'ını malzeme olarak kaydet (tablo ya da formül)."""
+    """Register a refractiveindex.info YAML as a material (table or formula)."""
     kind, *rest = load_nk_yaml(path)
     if kind == "table":
         register_table(name, *rest)
@@ -135,17 +135,17 @@ def register_yaml(name, path):
 
 
 def broadband_fit(wl, n, k, deg=6):
-    """Ölçülü (wl,n,k) üstüne polinom geniş-bant modeli (MCM-benzeri).
-    Döndürür: fn(lam)->n+ik. Solver'da hızlı, düzgün dispersiyon için."""
+    """Polynomial broadband model over measured (wl,n,k) (MCM-like).
+    Returns: fn(lam)->n+ik. For fast, smooth dispersion in the solver."""
     cn = np.polyfit(wl, n, deg); ck = np.polyfit(wl, k, deg)
     return lambda lam, cn=cn, ck=ck: np.polyval(cn, lam) + 1j * np.polyval(ck, lam)
 
 
 def eps_tensor(material, lam):
-    """Anizotropik diagonal tensör eps = diag(exx,eyy,ezz).
-    material: skaler isim/sayı (izotropik) VEYA {'xx':..,'yy':..,'zz':..} (bileşen malzemeler).
-    Not: native RCWA çözücümüz izotropik ER kullanır; çift-kırılım GEOMETRİK sağlanır
-    (bkz. birefringent_library). Bu fonksiyon tensör veri temsili + ileride kullanım içindir."""
+    """Anisotropic diagonal tensor eps = diag(exx,eyy,ezz).
+    material: scalar name/number (isotropic) OR {'xx':..,'yy':..,'zz':..} (per-component materials).
+    Note: our native RCWA solver uses an isotropic ER; birefringence is achieved GEOMETRICALLY
+    (see birefringent_library). This function is for tensor data representation + future use."""
     if isinstance(material, dict):
         return np.diag([complex(eps_of(material[a], lam)) for a in ("xx", "yy", "zz")])
     e = complex(eps_of(material, lam))
