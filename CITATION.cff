@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "rcwa-metalens: a from-scratch RCWA solver and metalens design pipeline"
+type: software
+authors:
+  - family-names: Durgun
+    given-names: Alperen
+version: 0.2.0
+license: MIT
+repository-code: "https://github.com/Alperen-Durgun/rcwa-metalens"
+keywords:
+  - RCWA
+  - metalens
+  - metasurface
+  - nanophotonics
+  - GDS

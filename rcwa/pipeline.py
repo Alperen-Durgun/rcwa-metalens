@@ -8,7 +8,6 @@
 - zemax_phase_csv(design): writes the ideal metalens phase profile φ(r) to CSV for hand-off
   to Zemax (Grid Phase / macro import). Bridge to system-scale ray optics.
 """
-import os
 import numpy as np
 
 
@@ -18,7 +17,6 @@ def estimate_and_run(design, run=False, add_xz_monitor=True, run_time=2.0e-13,
     run=True -> submit/wait/fetch (spends credits) + focus analysis.
     Returns: {estimate, ...(+ if run) focus_um, fwhm_nm, real_cost}."""
     from . import fullwave
-    import tidy3d as td
     from tidy3d import web
     sim = fullwave.build_tidy3d(design, add_xz_monitor=add_xz_monitor,
                                 run_time=run_time, min_steps_per_wvl=min_steps_per_wvl)

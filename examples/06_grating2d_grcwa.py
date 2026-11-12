@@ -21,11 +21,11 @@ def eps_grid(N):
     e[(np.abs(X - Lx/2) < side/2) & (np.abs(Y - Ly/2) < side/2)] = eps_hi
     return e
 
-print("=== 2D: rcwa_py vs grcwa (square pillar, normal incidence) ===\n")
+print("=== 2D: this solver vs grcwa (square pillar, normal incidence) ===\n")
 eN = eps_grid(120)
 for M in (5, 7, 9):
     m = solve_rcwa_2d(lam0, 0, 0, er_ref, er_trn, Lx, Ly, [(eN, d)], M, M, pol=(0., 1.))
-    print(f"rcwa_py  M={M}: Rtot={m['Rtot']:.5f} Ttot={m['Ttot']:.5f} ΣDE={m['Rtot']+m['Ttot']:.5f}")
+    print(f"native   M={M}: Rtot={m['Rtot']:.5f} Ttot={m['Ttot']:.5f} ΣDE={m['Rtot']+m['Ttot']:.5f}")
 
 obj = grcwa.obj(225, [Lx, 0.], [0., Ly], 1.0/lam0, 0., 0., verbose=0)
 obj.Add_LayerUniform(1.0, er_ref); obj.Add_LayerGrid(d, 120, 120); obj.Add_LayerUniform(1.0, er_trn)

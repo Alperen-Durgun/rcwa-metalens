@@ -1,4 +1,4 @@
-"""Example 5 — Independent validation: rcwa_py vs grcwa.
+"""Example 5 — Independent validation: this solver vs grcwa.
 Compares this code's results side by side with grcwa (Fan group, Stanford),
 a peer-reviewed open-source RCWA solver. If two independent codes give the
 same number, the accuracy is independently established.
@@ -53,7 +53,7 @@ def ref(spol):
 
 
 if __name__ == "__main__":
-    print("=== rcwa_py  vs  grcwa (independent reference), θ=15° binary grating ===\n")
+    print("=== this solver vs grcwa (independent reference), θ=15° binary grating ===\n")
     ok = True
     for name, pol, spol in [("TE / s-pol", (0., 1.), True), ("TM / p-pol", (1., 0.), False)]:
         Rm, Tm = mine(pol); Rr, Tr = ref(spol)
@@ -61,7 +61,7 @@ if __name__ == "__main__":
         ok &= (dR < 2e-3 and dT < 2e-3)
         print(f"--- {name} ---")
         print(f"{'':18s}{'Rtot':>10s}{'Ttot':>10s}")
-        print(f"{'rcwa_py':18s}{Rm:>10.5f}{Tm:>10.5f}")
+        print(f"{'this solver':18s}{Rm:>10.5f}{Tm:>10.5f}")
         print(f"{'grcwa':18s}{Rr:>10.5f}{Tr:>10.5f}")
         print(f"{'|diff|':18s}{dR:>10.2e}{dT:>10.2e}\n")
     print("RESULT:", "✅ Independent validation successful (difference < 2e-3)" if ok else "⚠️ Large difference, investigate")

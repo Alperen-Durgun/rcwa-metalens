@@ -6,8 +6,7 @@ if not exist ".venv\Scripts\activate.bat" (
   call ".venv\Scripts\activate.bat"
   pip install -r requirements.txt
 ) else ( call ".venv\Scripts\activate.bat" )
-echo [Automation] Running pending RCWA experiments...
-python run_experiment.py --all
+python tests\test_rcwa.py
+python tests\test_experiments.py
 echo.
-echo Done. Check the Reports folder and the Experiment Board.
 pause

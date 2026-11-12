@@ -1,12 +1,13 @@
 """COMPREHENSIVE VERIFICATION RUN — a single command.
 Unit tests + metric functions + all automation generators + phase-convention summary.
+(The same checks run under pytest — see tests/; this script prints a readable table.)
 Prints a pass/fail table to the terminal; with --report also writes a Markdown report to the vault.
 
 Usage (inside the .venv, from the repository root):
   python verify_all.py            # run everything, terminal table
   python verify_all.py --report   # + .md report under Raporlar/ in the vault
 """
-import os, sys, io, time, traceback
+import os, sys, time
 import numpy as np
 import matplotlib; matplotlib.use("Agg")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -89,10 +90,10 @@ for name, runner in R.RUNNERS.items():
 # ---------------- 4) PHASE-CONVENTION SUMMARY ----------------
 print("\n=== 4) PHASE-CONVENTION CHECK (summary) ===")
 conv = [
-    ("metalens_design_full (2D)", True, "conjugated — diffraction-limited focus verified with FDTD"),
+    ("metalens_design_full (2D)", True, "conjugated — diffraction-limited focus verified with FDTD (v0.1.0 runs)"),
     ("metalens_layout_2d (2D)", True, "conjugated — same 2D solver pattern"),
-    ("lens_fullwave_1d (1D)", True, "NO conjugation — super-cell RCWA ΣDE=1.0, focus≈f (correct)"),
-    ("achromatic_analysis (1D)", True, "NO conjugation — the 1D solver convention is correct"),
+    ("lens_fullwave_1d (1D)", True, "conjugated — verified by a full super-cell solve (test_lens_1d_physical_focus)"),
+    ("achromatic_analysis (1D)", True, "conjugated — same convention as the 2D designers"),
     ("vortex/hologram/polmux", True, "analytic phase mask — no RCWA mapping, unaffected"),
     ("deflector/tolerance", True, "optimizes the RCWA efficiency directly — unaffected"),
 ]
@@ -146,6 +147,6 @@ ilgili_proje_veya_alan: "[[🎯 RCWA Metalens Projesi]]"
     lines.append(f"\n---\n*Flora Status: {'🟢' if n_ok==n_all else '🟡'} Comprehensive verification {n_ok}/{n_all}. Re-run: `python verify_all.py --report`.*\n")
     rp = os.path.join(rep_dir, "🧪 Comprehensive Verification Report.md")
     open(rp, "w", encoding="utf-8").write("\n".join(lines))
-    print(f"\nReport written to the vault: Raporlar/🧪 Comprehensive Verification Report.md")
+    print("\nReport written to the vault: Raporlar/🧪 Comprehensive Verification Report.md")
 
 sys.exit(0 if n_ok == n_all else 1)

@@ -49,7 +49,6 @@ def main():
     print("-" * 62)
     print(f"GPU active: {'YES' if gpu else 'NO (CPU)'}")
     if miss_req:
-        yaml_pkg = "pyyaml" if "yaml" in miss_req else ""
         pkgs = " ".join("pyyaml" if p == "yaml" else p for p in miss_req)
         print(f"\n⚠️ REQUIRED missing: {pkgs}")
         print(f"   Install:  pip install {pkgs}")

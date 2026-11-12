@@ -582,7 +582,7 @@ def test_gds_hierarchical_equals_flat():
     file is several times smaller. Mixed shapes and rotations included."""
     import gdstk, tempfile, os
     from rcwa import gds
-    rng = np.random.default_rng(1); sizes = [0.10, 0.15, 0.20]
+    sizes = [0.10, 0.15, 0.20]
     pl = [{"x": i * 0.35, "y": j * 0.35, "shape": "circle", "params": sizes[(i + j) % 3], "angle": 0.0}
           for i in range(20) for j in range(20)]
     pl += [{"x": -1.0, "y": -1.0, "shape": "rect", "params": (0.3, 0.1), "angle": 0.5},

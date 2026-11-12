@@ -43,11 +43,11 @@ def main(path):
             print(f"  Peak position x={xs[j[0]]:.2f}um  |  FWHM={fwhm:.0f}nm")
             NA = np.sin(np.arctan((design['D_lens'])/2/design['f']))
             print(f"  Diffraction limit λ/(2NA)={design['lam0']/(2*NA)*1000:.0f}nm")
-            print(f"  (RCWA prediction: focus z=24.8um, FWHM=788nm) -> compare")
+            print("  (RCWA prediction: focus z=24.8um, FWHM=788nm) -> compare")
         else:
             print("To run (spends credits): python examples/13_fullwave_verify.py <json> run")
     else:
-        res = fullwave.run_fullwave(design, backend="meep", resolution=20, until=150)
+        fullwave.run_fullwave(design, backend="meep", resolution=20, until=150)
         print("Meep FDTD finished; post-process the field to extract the focus (see examples/11).")
 
 if __name__ == "__main__":

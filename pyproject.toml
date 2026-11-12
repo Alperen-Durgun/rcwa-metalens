@@ -20,6 +20,8 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
@@ -35,6 +37,7 @@ dependencies = [
 [project.optional-dependencies]
 fdtd = ["tidy3d"]        # cloud FDTD validation (meep is installed separately via conda)
 gpu = ["jax", "cupy"]    # E2 GPU backends (NVIDIA)
+dev = ["pytest", "ruff"]
 
 [project.scripts]
 rcwa-metalens = "rcwa.cli:main_entry"
@@ -45,6 +48,20 @@ Repository = "https://github.com/Alperen-Durgun/rcwa-metalens"
 
 [tool.setuptools]
 packages = ["rcwa"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 200
+exclude = [".venv", "workspace", "build"]
+
+[tool.ruff.lint]
+# pyflakes (real bugs: undefined names, unused imports/variables) + syntax errors.
+# The numerical code deliberately uses compact one-line statements, so the E7xx style
+# rules are not enforced.
+select = ["F", "E9"]
 
 [tool.setuptools.dynamic]
 version = { attr = "rcwa.__version__" }

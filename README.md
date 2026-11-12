@@ -1,127 +1,198 @@
-# rcwa_py — RCWA & Metalens Design Library
+# rcwa-metalens
 
-> A from-scratch, tested **RCWA (Rigorous Coupled-Wave Analysis)** solver in Python
-> for **metalens design and simulation** — 1D & 2D solvers, meta-atom libraries,
-> GDS mask export, professional optical metrics, and FDTD cross-validation
-> (Meep / Tidy3D). Educational yet FDTD-validated.
-
-A from-scratch, **tested** RCWA solver and metalens design pipeline. It includes
-1D/2D solvers, meta-atom phase libraries, manufacturable **GDS-II** mask output,
-professional optical metrics, and **FDTD cross-validation** (Meep + Tidy3D).
+**A from-scratch RCWA solver and metalens design pipeline in Python** — from a single
+meta-atom to a fabrication-ready GDS mask, with the optical metrics and the FDTD bridges
+needed to check the result.
 
 [![CI](https://github.com/Alperen-Durgun/rcwa-metalens/actions/workflows/ci.yml/badge.svg)](https://github.com/Alperen-Durgun/rcwa-metalens/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 
----
+```
+meta-atom library ──► lens phase ──► atom selection ──► focal analysis ──► GDS + DRC
+   (RCWA, 2D)        (hyperbolic)    (complex match)    (Strehl, MTF …)    (hierarchical)
+                                                              │
+                                              design JSON ──► Meep / Tidy3D (FDTD check)
+```
 
-## ✨ Highlights
+## What is inside
 
-- **Core RCWA** — 1D (TE/TM, Li inverse rule, symmetry reduction) and fully vectorial 2D solver; energy-conserving automatic order selection.
-- **Stability** — Redheffer star-product + S-matrix; energy conservation verified by unit tests.
-- **Materials** — dispersive n(λ)+loss (SiO₂, TiO₂, Si, Ag, SiN); measured n,k tables + `refractiveindex.info` YAML import.
-- **Metalens pipeline** — meta-atom library → phase profile → layout → focus; local-periodic approximation.
-- **Fabrication** — pure-Python, Unicode-path-safe **GDS-II** writer; arbitrary geometry (circle/square/hexagon/cross/ellipse); cm-scale tiled large lenses.
-- **Professional metrics** — FWHM, focusing efficiency (absolute/relative), Strehl, MTF, encircled energy, sidelobe, DOF, chromatic shift, group delay.
-- **FDTD bridges** — local **Meep** (offline) and cloud **Tidy3D** for independent validation.
-- **Automation** — `run_experiment.py` with **23 experiment types**; `verify_all.py` for one-command end-to-end validation.
+| Area | What you get |
+|---|---|
+| **Solvers** | Full-vector 1D and 2D RCWA (S-matrix, Redheffer star product) with Li's Fourier factorization; scalar 1D solver with mirror-symmetry reduction; energy-gated automatic order selection |
+| **Materials** | Dispersive, absorbing materials (`n + ik`); `refractiveindex.info` YAML import; provenance and valid range for every dataset |
+| **Design core** | `rcwa.design`: library → hyperbolic phase → vectorized atom selection → angular-spectrum focal analysis, all in one convention |
+| **Metrics** | FWHM, absolute/relative focusing efficiency, Strehl (same-plane reference), MTF, encircled energy, sidelobe level, depth of focus, group delay |
+| **Fabrication** | Pure-Python GDS-II writer (works with non-ASCII Windows paths), hierarchical output (~36 bytes per pillar), tiled cm-scale lenses, design-rule check |
+| **Verification** | Bridges to Meep (local FDTD) and Tidy3D (cloud FDTD); grcwa cross-checks |
+| **Automation** | 23 experiment generators behind one command line; optional Markdown-note workflow (Obsidian friendly) |
 
-## 📦 Installation
+## Install
 
 ```bash
-cd rcwa_py
+git clone https://github.com/Alperen-Durgun/rcwa-metalens
+cd rcwa-metalens
 python -m venv .venv
-# Windows:  .venv\Scripts\activate
-# Linux/Mac: source .venv/bin/activate
-pip install -r requirements.txt
+# Windows:    .venv\Scripts\activate
+# Linux/Mac:  source .venv/bin/activate
+pip install -e .            # or:  pip install -r requirements.txt  (run from the clone, no install)
 ```
 
 Required: `numpy scipy matplotlib grcwa autograd gdstk pyyaml`.
-Optional: `tidy3d` (cloud FDTD), `meep` (local FDTD, via conda), `jax`/`cupy` (GPU).
+Optional: `tidy3d` (cloud FDTD, `pip install -e ".[fdtd]"`), `meep` (local FDTD, via conda),
+`jax` / `cupy` (GPU). `python check_env.py` reports what is installed and what each package enables.
 
-## 🚀 Quick start
+On Windows, `setup_env.bat` creates the environment, `run_tests.bat` runs the tests.
+
+## Quick start
+
+### Command line
+
+```bash
+rcwa-metalens list                                   # the 23 experiment types
+rcwa-metalens help metalens_design_full              # its parameters and defaults
+rcwa-metalens metalens_design_full D_lens=16 f=20 material=TiO2_t lam0=0.633
+```
+
+From a clone without installing, use `python metadesign.py …` with the same arguments.
+Results (figure, GDS, design JSON) go to `./workspace/outputs`; choose another place with
+`--out DIR` or the `RCWA_PROJECT_DIR` environment variable. Lengths are in micrometres,
+angles in degrees. A mistyped parameter is rejected with a suggestion instead of being ignored.
+
+### Python — design a lens
+
+```python
+from rcwa import design, gds
+
+d = design.design_lens(lam0=0.633, L=0.35, H=0.60, D_lens=16, f=20,
+                       shape="circle", material="TiO2_t")
+a = design.analyze_focus(d)
+print(f"focus {a['z_focus']:.2f} um, FWHM {a['fwhm']*1000:.0f} nm, "
+      f"Strehl {a['strehl']:.2f}, efficiency {a['eff_absolute']:.0%}")
+
+gds.layout_to_gds(d["placements"], "lens.gds")       # fabrication mask
+```
+
+### Python — the solver itself
 
 ```python
 import numpy as np
 from rcwa import solve_rcwa_1d
 
 x = (np.arange(512) + 0.5) / 512
-eps = np.where(x < 0.5, 4.0, 1.0)          # binary grating: n=2 / air
+eps = np.where(x < 0.5, 4.0, 1.0)                    # binary grating: n = 2 / air
 res = solve_rcwa_1d(lam0=0.55, theta_deg=15, er_ref=1.0, er_trn=2.25,
-                    period=1.2, layers=[(eps, 0.30)], P=41, pol=(0, 1))  # TE
-print(res['Rtot'], res['Ttot'], res['Rtot'] + res['Ttot'])  # ~ energy conserved
+                    period=1.2, layers=[(eps, 0.30)], P=41, pol=(0, 1))   # TE
+print(res["Rtot"], res["Ttot"], res["Rtot"] + res["Ttot"])               # energy is conserved
 ```
 
-Full metalens design (design + metrics + GDS):
+## Conventions you must know
+
+* **Phase / time convention.** The solvers return complex amplitudes in the engineering
+  convention `exp(+jωt)`; lens formulas, the angular-spectrum propagator and FDTD tools use
+  `exp(−iωt)`. They differ by complex conjugation. Use `rcwa.to_physical` /
+  `rcwa.physical_phase`, or simply work through `rcwa.design`, which converts once. Using a
+  raw solver phase in a lens layout produces a *diverging* lens.
+* **Materials.** `eps = (n + ik)²`, `Im(eps) > 0` is absorption.
+* **Units.** Micrometres and degrees everywhere.
+
+Details, definitions of every metric and accuracy guidance: [docs/conventions.md](docs/conventions.md).
+
+## Validation
 
 ```bash
-python metadesign.py metalens_design_full D_lens=16 f=20 material=TiO2_t lam0=0.633
+pytest                              # 48 unit tests + 29 end-to-end tests
+python verify_all.py                # human-readable pass/fail table of everything
 ```
 
-## ✅ Validation
+What the tests establish:
 
-```bash
-python verify_all.py            # unit tests + metrics + 23 generators + convention audit
-python verify_all.py --report   # + Markdown report
-python tests/test_rcwa.py       # unit tests only (30 tests)
-```
+* analytic checks — Fresnel slab (to 1e-6), absorbing film, energy conservation in 1D/2D,
+  behaviour exactly at a Rayleigh anomaly;
+* cross-checks against the independent solver **grcwa** — dielectric, lossy and metallic
+  cells, oblique incidence, hexagonal lattice;
+* the phase convention — a 1D metalens solved as one full super-cell focuses at the design
+  focal length with the converted library and does not focus with the raw solver phase;
+* GDS — files are read back with gdstk; hierarchical and flat output describe identical geometry;
+* every experiment generator, the command line and the note workflow run end to end.
 
-The solver is validated against Tidy3D FDTD at the unit-cell level to within **0.04%**,
-and at the full-lens level against Meep/Tidy3D 3D FDTD via **diffraction-limited focus**.
+**FDTD status.** Earlier versions of this code were compared with Tidy3D and Meep (unit-cell
+transmission and focusing of small 3D lenses). Since then the 2D solver switched to Li's
+factorization and a finer geometry raster, which changes library phases by a few hundredths of
+a radian; the FDTD comparison has not been repeated for this version. The scripts to do so are
+`examples/14_unitcell_fdtd_vs_rcwa.py`, `15_unitcell_phase.py` and `16_lens_focus_fdtd.py`.
 
-## 🗂️ Structure
+## Limits — read before sending a mask to a foundry
 
-```
-rcwa_py/
-├── rcwa/                    # core package
-│   ├── solver.py           # 1D RCWA solver
-│   ├── solver1d_scalar.py  # scalar 1D (Li inverse rule + symmetry)
-│   ├── solver2d.py         # fully vectorial 2D solver
-│   ├── convmat.py          # convolution matrix (1D+2D)
-│   ├── layer.py            # eigenmodes + layer S-matrix
-│   ├── redheffer.py        # star-product
-│   ├── stable.py           # energy-conserving automatic-M selection
-│   ├── materials.py        # dispersive n(λ), measured n,k
-│   ├── metrics.py          # FWHM / efficiency / Strehl / MTF / DOF / group delay
-│   ├── shapes.py           # arbitrary geometry + GDS polygons
-│   ├── gds.py / gdswriter.py  # pure-Python, Unicode-safe GDS-II writer
-│   ├── largelens.py        # cm-scale tiled large lens
-│   ├── fullwave.py         # Meep + Tidy3D FDTD bridge
-│   ├── adjoint.py          # adjoint / inverse design
-│   ├── hiacc2d.py          # metallic-2D + hexagonal lattice
-│   ├── exporting.py        # BSDF / far-field / DRC
-│   ├── pipeline.py         # Zemax phase-CSV + tiling
-│   ├── backends.py         # GPU backends (jax/cupy)
-│   ├── cache.py            # library cache
-│   └── materials_data/     # measured n,k tables
-├── examples/               # 24 examples (RCWA + Meep + Tidy3D)
-├── tests/test_rcwa.py      # 30 unit tests
-├── run_experiment.py       # automation for 23 experiment types
-├── metadesign.py           # command-line interface
-├── verify_all.py           # end-to-end validation
-├── check_env.py            # environment check
-└── requirements.txt
-```
+* Lens designs use the **locally periodic approximation**: each pillar is simulated in an
+  infinite array of identical neighbours. It degrades at high NA and for strongly coupled
+  pillars; confirm a design with FDTD on a representative section.
+* The built-in material tables are **approximate** (a few points across 0.45–0.70 µm). Thin-film
+  indices depend on the deposition process — load measured data with
+  `materials.register_yaml(...)`. Reports print where the material data came from.
+* The full-wave 1D super-cell generator needs roughly `M ≳ 1.5·n·D/λ` orders; the report says
+  whether a run was resolved.
+* Substrates (`n_sub`) are supported by the RCWA library and passed to the FDTD bridges, but
+  the FDTD bridges with a substrate have not been run against a real FDTD install yet.
+* GPU back-ends are detected and selected, but have not been exercised on GPU hardware.
 
-## 🔬 Experiment types (summary)
+## Experiment types
 
 `grating`, `metalens_library`, `angle_sweep`, `grating2d`, `metalens_pillar_2d`,
-`metalens_layout_2d`, `param_map_2d`, `lens_fullwave_1d`, `wavelength_sweep`,
-`birefringent_library`, `jones_matrix`, `pb_phase_library`, `inverse_design_deflector`,
+`lens_fullwave_1d`, `metalens_layout_2d`, `wavelength_sweep`, `birefringent_library`,
+`jones_matrix`, `pb_phase_library`, `param_map_2d`, `inverse_design_deflector`,
 `achromatic_analysis`, `achromatic_design`, `vortex_beam`, `hologram`,
-`polarization_multiplexed`, `metalens_design_full`, `tolerance_analysis`,
-`fov_analysis`, `index_robustness`, `metalens_large_tiled`.
+`polarization_multiplexed`, `metalens_design_full`, `tolerance_analysis`, `fov_analysis`,
+`index_robustness`, `metalens_large_tiled`.
 
-Run `metadesign.py <type>` to see each type's parameters.
+`rcwa-metalens list` prints a one-line description of each.
 
-## 🔑 Tidy3D (optional)
+## Repository layout
 
-Do **not** hardcode the API key. Configure it once:
-
-```bash
-tidy3d configure      # the key is written to ~/.tidy3d/config (outside the repo, gitignored)
+```
+rcwa/                     the package
+  solver.py  solver2d.py  solver1d_scalar.py  stable.py      RCWA solvers
+  convmat.py  layer.py  redheffer.py                          solver building blocks
+  convention.py                                               phase/time convention helpers
+  materials.py  materials_data/                               dispersive materials
+  shapes.py                                                   meta-atom geometries (raster + polygons)
+  design.py                                                   metalens design core
+  metrics.py                                                  optical figures of merit
+  gds.py  gdswriter.py  largelens.py  exporting.py            GDS, tiled large lenses, DRC, BSDF
+  fullwave.py  pipeline.py                                    Meep / Tidy3D / Zemax bridges
+  adjoint.py  hiacc2d.py  backends.py                         adjoint design, grcwa bridge, GPU detection
+  experiments.py  cli.py                                      23 generators + command line
+examples/                 19 Python scripts + 1 shell script (validation, libraries, Meep and Tidy3D runs)
+tests/                    test_rcwa.py (unit) · test_experiments.py (end to end)
+docs/conventions.md       conventions, metric definitions, accuracy guidance
+metadesign.py  run_experiment.py  verify_all.py  check_env.py launchers for use from a clone
 ```
 
-## 📄 License
+### Note workflow (optional)
 
+Experiments can also be described as Markdown notes with front matter and run in batch —
+handy inside an Obsidian vault:
+
+```markdown
+---
+experiment_type: metalens_design_full
+status: pending
+D_lens: 16
+f: 20
+---
+```
+
+Put such notes in `workspace/experiments/`. `rcwa-metalens run --all` runs every pending
+note, writes a report note (results table + figure) to `workspace/reports/` and marks the
+note done. The original Turkish keys (`deney_tipi`, `durum: bekliyor`) are accepted too,
+and inside an Obsidian vault the vault's own folders are used.
+
+## Tidy3D key
+
+Never put the API key in a file of this repository. Configure it once with `tidy3d configure`;
+it is stored in `~/.tidy3d/config`.
+
+## Citing, contributing, license
+
+See [CITATION.cff](CITATION.cff), [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md).
 [MIT](LICENSE) © 2026 Alperen Durgun

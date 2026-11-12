@@ -6,6 +6,8 @@ if not exist ".venv\Scripts\activate.bat" (
   call ".venv\Scripts\activate.bat"
   pip install -r requirements.txt
 ) else ( call ".venv\Scripts\activate.bat" )
-python tests\test_rcwa.py
+echo [Automation] Running pending RCWA experiments...
+python run_experiment.py --all
 echo.
+echo Done. Reports are in the reports folder (Raporlar inside an Obsidian vault).
 pause

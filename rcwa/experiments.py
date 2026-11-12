@@ -5,7 +5,8 @@ summary)`` registered in ``RUNNERS``. They can be driven three ways:
 
   * command line:   rcwa-metalens <type> key=value ...        (see rcwa/cli.py)
   * Python:         from rcwa.experiments import RUNNERS
-  * note workflow:  experiment notes (*.md with a ``deney_tipi`` front-matter field) are run
+  * note workflow:  experiment notes (*.md with an ``experiment_type`` — or Turkish
+                    ``deney_tipi`` — front-matter field and ``status: pending``) are run
                     and a report note is written next to them (Obsidian-vault friendly):
                         python run_experiment.py --all
                         python run_experiment.py "path/to/experiment.md"
@@ -18,7 +19,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from . import solve_rcwa_1d, solve_rcwa_2d, solve_1d_auto, solve_scalar_1d, materials, cache, metrics, shapes, gds
+from . import solve_rcwa_1d, solve_rcwa_2d, solve_scalar_1d, materials, cache, metrics, shapes, gds
 from . import design as dz
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # repository root (when run from a clone)
@@ -52,7 +53,7 @@ def _out(name):
 # ----------------------------- helpers -----------------------------
 def parse_frontmatter(text):
     """Simple YAML-like frontmatter parser (key: value)."""
-    m = re.match(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", text, re.S)
+    m = re.match(r"^\ufeff?---\s*\n(.*?)\n---\s*\n?(.*)$", text.replace("\r\n", "\n"), re.S)
     if not m:
         return {}, text
     fm, body = {}, m.group(1)
@@ -768,7 +769,6 @@ def run_achromatic_design(fm, slug):
     ph0 = phi_phys[:, :, 1].ravel()                        # phase at λ0
     unwrapped = np.unwrap(-PH, axis=2)                     # continuous phase for GD
     GD = ((unwrapped[:, :, 2] - unwrapped[:, :, 0]) / (om[2] - om[0])).ravel()
-    amp = AM[:, :, 1].ravel()
     S, Hh = np.meshgrid(sizes, heights, indexing="ij")
     size_flat = S.ravel(); h_flat = Hh.ravel()
     # target profile
@@ -977,15 +977,41 @@ RUNNERS = {"grating": run_grating, "metalens_library": run_metalens_library,
 
 
 # ----------------------------- report + update -----------------------------
+_META_KEYS = ("etiketler", "ilgili_proje_veya_alan", "id", "tur", "durum", "olusturulma", "son_rapor", "deney_tipi",
+              "tags", "kind", "status", "created", "last_report", "experiment_type")
+
+
+def _is_english(fm):
+    """Notes may use English front-matter keys (experiment_type / status: pending) or the
+    original Turkish ones (deney_tipi / durum: bekliyor). The report follows the note's style."""
+    return "experiment_type" in fm
+
+
 def write_report(exp_name, fm, figpath, body, summary):
     ts = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    slug = slugify(exp_name)
-    title = f"Rapor - {exp_name} - {stamp}"
+    en = _is_english(fm)
+    title = f"{'Report' if en else 'Rapor'} - {exp_name} - {stamp}"
     figname = os.path.basename(figpath)
-    params = "\n".join(f"| {k} | {v} |" for k, v in fm.items()
-                       if k not in ("etiketler","ilgili_proje_veya_alan","id","tur","durum","olusturulma","son_rapor"))
-    md = f"""---
+    params = "\n".join(f"| {k} | {v} |" for k, v in fm.items() if k not in _META_KEYS)
+    if en:
+        head = f"""---
+id: {stamp}
+created: {ts}
+kind: report
+status: 🟢 done
+experiment: "[[{exp_name}]]"
+tags:
+  - rcwa
+  - report
+---
+
+# 📊 {title}
+
+Experiment: [[{exp_name}]]  ·  Run: {ts}
+"""
+    else:
+        head = f"""---
 id: {stamp}
 olusturulma: {ts}
 tur: rapor
@@ -1000,7 +1026,8 @@ ilgili_proje_veya_alan: "[[🧪 RCWA Deney Panosu]]"
 # 📊 {title}
 
 ⬅️ [[🧪 RCWA Deney Panosu]] · Experiment: [[{exp_name}]]  ·  Run: {ts}
-
+"""
+    md = head + f"""
 > **Summary:** {summary}
 
 ## 🔧 Parameters
@@ -1017,9 +1044,6 @@ ilgili_proje_veya_alan: "[[🧪 RCWA Deney Panosu]]"
 ## 🔍 Review / Notes
 *(Add your own comments here: is this as expected? what should the next experiment be?)*
 - 
-
----
-*Flora Status: 🟢 Auto-generated. Fill in the review section yourself.*
 """
     os.makedirs(RAPORLAR, exist_ok=True)
     path = os.path.join(RAPORLAR, title + ".md")
@@ -1028,14 +1052,20 @@ ilgili_proje_veya_alan: "[[🧪 RCWA Deney Panosu]]"
     return title
 
 
-def mark_done(exp_path, report_title):
+def mark_done(exp_path, report_title, english=False):
+    """Set the note's status to done and link the report (keys follow the note's language)."""
+    k_status, v_done, k_rep = ("status", "🟢 done", "last_report") if english else ("durum", "🟢 tamamlandi", "son_rapor")
     with open(exp_path, "r", encoding="utf-8") as f:
         txt = f.read()
-    txt = re.sub(r"(?m)^durum:.*$", "durum: 🟢 tamamlandi", txt, count=1)
-    if "son_rapor:" in txt:
-        txt = re.sub(r"(?m)^son_rapor:.*$", f'son_rapor: "[[{report_title}]]"', txt, count=1)
+    if re.search(rf"(?m)^{k_status}:", txt):
+        txt = re.sub(rf"(?m)^{k_status}:.*$", f"{k_status}: {v_done}", txt, count=1)
+    else:                                                    # no status line yet: add one after the opening ---
+        txt = re.sub(r"\A---[ \t]*\r?\n", f"---\n{k_status}: {v_done}\n", txt, count=1)
+    link = f'{k_rep}: "[[{report_title}]]"'
+    if re.search(rf"(?m)^{k_rep}:", txt):
+        txt = re.sub(rf"(?m)^{k_rep}:.*$", lambda m: link, txt, count=1)
     else:
-        txt = re.sub(r"(?m)^(durum: .*)$", rf'\1\nson_rapor: "[[{report_title}]]"', txt, count=1)
+        txt = re.sub(rf"(?m)^({k_status}: .*)$", lambda m: m.group(1) + "\n" + link, txt, count=1)
     with open(exp_path, "w", encoding="utf-8") as f:
         f.write(txt)
 
@@ -1044,39 +1074,45 @@ def run_file(path):
     with open(path, "r", encoding="utf-8") as f:
         text = f.read()
     fm, _ = parse_frontmatter(text)
-    tip = fm.get("deney_tipi", "grating")
     name = os.path.splitext(os.path.basename(path))[0]
+    tip = fm.get("experiment_type") or fm.get("deney_tipi")
+    if not tip:
+        print(f"  ⚠️ no 'experiment_type' (or 'deney_tipi') in the front matter — skipped: {name}")
+        return False
     if tip not in RUNNERS:
-        print(f"  ⚠️ unknown deney_tipi '{tip}' — skipped: {name}")
+        import difflib
+        near = difflib.get_close_matches(tip, list(RUNNERS), n=2)
+        print(f"  ⚠️ unknown experiment type '{tip}'" + (f" (did you mean {', '.join(near)}?)" if near else "") + f" — skipped: {name}")
         return False
     print(f"  ▶ running: {name}  (type={tip})")
     figpath, body, summary = RUNNERS[tip](fm, slugify(name))
     title = write_report(name, fm, figpath, body, summary)
-    mark_done(path, title)
+    mark_done(path, title, english=_is_english(fm))
     print(f"    ✅ {summary}\n    report -> {title}")
     return True
+
+
+def _is_pending(fm):
+    s = " ".join(str(fm.get(k, "")) for k in ("status", "durum", "tags", "etiketler")).lower()
+    return "pending" in s or "bekliyor" in s
 
 
 def main(argv):
     args = argv[1:]
     if args and args[0] != "--all":
         run_file(args[0]); return
-    # --all: pending experiments (status contains 'bekliyor')
+    # --all: every note in the experiments folder whose status is pending
     os.makedirs(DENEYLER, exist_ok=True)
-    files = [os.path.join(DENEYLER, f) for f in os.listdir(DENEYLER) if f.endswith(".md")]
-    pending = []
-    for p in files:
-        fm, _ = parse_frontmatter(open(p, encoding="utf-8").read())
-        if "bekliyor" in fm.get("durum", "") or "bekliyor" in fm.get("etiketler", ""):
-            pending.append(p)
+    files = sorted(os.path.join(DENEYLER, f) for f in os.listdir(DENEYLER) if f.endswith(".md"))
+    pending = [p for p in files if _is_pending(parse_frontmatter(open(p, encoding="utf-8").read())[0])]
     if not pending:
-        print("No pending experiments. (Add an experiment with 'durum: 🔬 bekliyor'.)"); return
+        print(f"No pending experiments in {DENEYLER}\n(add a note with 'status: pending' — or 'durum: 🔬 bekliyor' — in its front matter)."); return
     print(f"{len(pending)} pending experiment(s) found.")
     for p in pending:
         try:
             run_file(p)
         except Exception as e:
-            print(f"  ❌ error ({os.path.basename(p)}): {e}")
+            print(f"  ❌ error ({os.path.basename(p)}): {type(e).__name__}: {e}")
 
 
 if __name__ == "__main__":

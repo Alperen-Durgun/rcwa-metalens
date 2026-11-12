@@ -30,7 +30,7 @@ rz = design.get("rcwa_focus_um"); rfw = design.get("rcwa_fwhm_nm")
 # memory estimate (rough): voxels * ~6 field components * 16 bytes (complex) + DFT/auxiliary
 vox = (sx * resolution) * (sy * resolution) * (sz * resolution)
 mem_gb = vox * 260 / 1e9   # realistic Meep peak: ~260 bytes/voxel (fields+geometry+DFT+aux)
-print(f"=== MEEP 3D LENS FOCUS ===")
+print("=== MEEP 3D LENS FOCUS ===")
 print(f"Design: {shape}/{design.get('material')}, {len(design['placements'])} pillars, D={D:.2f}um f={f}um")
 print(f"Cell: {sx:.1f}x{sy:.1f}x{sz:.1f} um, resolution={resolution} -> ~{vox/1e6:.1f}M voxels")
 print(f"ROUGH MEMORY ESTIMATE: ~{mem_gb:.1f} GB (if too high press Ctrl-C and retry with a lower resolution)")

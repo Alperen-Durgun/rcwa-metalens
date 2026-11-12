@@ -91,7 +91,7 @@ def write_gds(placements, filepath, cell_name="METALENS", layer=1, datatype=0,
                                            angle=ang, n_circle=n_circle), float)
                 f.write(_rec(0x05, 0x02, ts) + _rec(0x06, 0x06, names[k]) + boundary(verts) + _rec(0x07, 0x00))
             f.write(_rec(0x05, 0x02, ts) + _rec(0x06, 0x06, _ascii(cell_name)))  # top cell
-            ln = len(names[0]); rec_len = 4 + (4 + ln) + 12 + 4
+            ln = len(names[0])                     # SREF record: 4 + (4+ln) + 12 + 4 bytes
             tmpl = _rec(0x0A, 0x00) + _rec(0x12, 0x06, names[0]) + _rec(0x10, 0x03, b"\x00" * 8) + r_end
             table = np.frombuffer(b"".join(names), np.uint8).reshape(len(names), ln)
             xy = np.array([[p["x"], p["y"]] for p in placements], float)

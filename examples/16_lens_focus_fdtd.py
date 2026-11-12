@@ -29,7 +29,6 @@ print(f"Design: {design.get('shape')} / {design.get('material')}, "
 if rz is not None:
     print(f"RCWA prediction: focus z={rz}um, FWHM={rfw}nm (λ/2NA={dl:.0f}nm)")
 
-import tidy3d as td
 from tidy3d import web
 
 # run_time: ~4 passes so the focus settles in the small domain (cheap)

@@ -1,6 +1,6 @@
 """Example 7 — 2D meta-atom phase library (a real metalens unit cell).
 Sweeps the side of a square nano-pillar and extracts the 0th-order transmission
-phase/amplitude. 2D = a real metalens (pillar in x-y). The plot is saved to Simulasyonlar/.
+phase/amplitude. 2D = a real metalens (pillar in x-y). The plot is saved to examples/output/.
 Run: python examples/07_metalens_pillar_2d.py
 """
 import numpy as np, sys, os
@@ -27,5 +27,5 @@ ax[0].set_ylabel("Phase (π)"); ax[0].set_title("2D phase library"); ax[0].grid(
 ax[1].plot(sides*1000, amp, 's-', color='C1'); ax[1].set_xlabel("Pillar side (nm)")
 ax[1].set_ylabel("|t0|"); ax[1].set_ylim(0, 1.05); ax[1].set_title("Amplitude"); ax[1].grid(True, alpha=.3)
 fig.suptitle(f"2D meta-atom (λ={lam0}, Λ={L}, H={H}, n={n_pillar})"); fig.tight_layout()
-out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "Simulasyonlar", "meta_atom_2d_phase_library.png"))
-fig.savefig(out, dpi=130); print("Plot ->", out)
+out = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "meta_atom_2d_phase_library.png"))
+os.makedirs(os.path.dirname(out), exist_ok=True); fig.savefig(out, dpi=130); print("Plot ->", out)

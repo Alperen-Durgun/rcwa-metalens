@@ -84,5 +84,5 @@ ax[2].plot(xax*1000, cut); ax[2].axhline(0.5, color="gray", ls=":"); ax[2].set_x
 ax[2].set_xlabel("x (nm)"); ax[2].set_ylabel("I (norm)"); ax[2].set_title(f"Focal cut — FWHM={fwhm*1000:.0f}nm")
 fig.suptitle(f"2D METALENS design — D={D_lens:.0f}um f={f}um NA={NA:.2f} | focus z={zf:.1f}um, efficiency~{eff*100:.0f}% (locally-periodic)")
 fig.tight_layout()
-out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "Simulasyonlar", "metalens_layout_2d.png"))
-fig.savefig(out, dpi=130); print("Plot ->", out)
+out = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "metalens_layout_2d.png"))
+os.makedirs(os.path.dirname(out), exist_ok=True); fig.savefig(out, dpi=130); print("Plot ->", out)

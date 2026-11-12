@@ -25,7 +25,6 @@ def homogeneous_modes(KX, KY, er, ur=1.0):
     """Eigenmodes of a homogeneous region (W=I, V, KZ)."""
     P = KX.shape[0]
     I = np.eye(P, dtype=complex)
-    Z = np.zeros((P, P), dtype=complex)
     Q = (1.0 / ur) * np.block([[KX @ KY, ur * er * I - KX @ KX],
                                [KY @ KY - ur * er * I, -KY @ KX]])
     kz = np.conj(np.sqrt((er * ur) - np.diag(KX) ** 2 - np.diag(KY) ** 2 + 0j))   # KX, KY are diagonal

@@ -101,5 +101,5 @@ ax[2].plot((xo-X0)*1000, If); ax[2].axhline(0.5, color="gray", ls=":"); ax[2].se
 ax[2].set_xlabel("x (nm)"); ax[2].set_ylabel("I"); ax[2].set_title(f"Focus — FWHM={fwhm*1000:.0f}nm")
 fig.suptitle(f"FULL-WAVE metalens (1D) D={D_lens:.1f}um f={f}um NA={NA:.2f} | {len(stable)} stable M, focus z={zf:.2f}um")
 fig.tight_layout()
-out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "Simulasyonlar", "lens_fullwave_1d.png"))
-fig.savefig(out, dpi=130); print("Plot ->", out)
+out = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "lens_fullwave_1d.png"))
+os.makedirs(os.path.dirname(out), exist_ok=True); fig.savefig(out, dpi=130); print("Plot ->", out)

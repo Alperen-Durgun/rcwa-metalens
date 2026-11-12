@@ -1,5 +1,8 @@
-"""Educational RCWA library — 1D and 2D (TE + TM).
-1D/2D solver, stable automatic solver, dispersive materials, cache.
+"""rcwa-metalens — RCWA solvers (1D/2D) and a metalens design pipeline.
+
+Solvers: solve_rcwa_1d, solve_rcwa_2d, solve_scalar_1d (+ solve_1d_auto / solve_2d_auto).
+Design:  rcwa.design (library -> selection -> focal analysis), rcwa.gds, rcwa.metrics.
+Read rcwa.convention (or docs/conventions.md) before using raw solver phases.
 """
 from .convmat import convmat1d, convmat2d
 from .redheffer import redheffer_star
@@ -24,4 +27,4 @@ __all__ = ["convmat1d", "convmat2d", "redheffer_star", "homogeneous_modes",
            "solve_rcwa_1d", "solve_rcwa_2d", "solve_1d_auto", "solve_2d_auto", "solve_scalar_1d",
            "materials", "cache", "metrics", "shapes", "gds", "fullwave", "modes_from_ER_cached", "parallel_map",
            "convention", "design", "to_physical", "physical_phase"]
-__version__ = "0.2.0.dev0"
+__version__ = "0.2.0"

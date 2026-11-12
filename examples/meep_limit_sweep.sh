@@ -1,8 +1,12 @@
 #!/bin/bash
-# Meep OOM sweep: increase resolution, stop on OOM/error. Ceiling = last OK res.
-# Run (WSL, from the rcwa_py folder):  wsl bash examples/meep_limit_sweep.sh
-PY=$HOME/miniforge3/envs/mp/bin/python
-D="../../Simulasyonlar/Gercek_Tasarim_2_HighNA_TiO2_633nm_D10f8_design.json"
+# Meep memory-limit sweep: raise the resolution step by step and stop at the first
+# out-of-memory/error. The ceiling of this machine = the last resolution that finished.
+#
+# Usage (WSL / Linux, from the repository root, conda env with pymeep):
+#   bash examples/meep_limit_sweep.sh path/to/<name>_design.json [python-executable]
+# The design JSON is written by:  rcwa-metalens metalens_design_full ...
+D="${1:?usage: meep_limit_sweep.sh <design.json> [python]}"
+PY="${2:-python}"
 for R in 12 14 16 18 20 22; do
   echo "===================== res=$R STARTING ====================="
   "$PY" -u examples/meep_lens_focus.py "$D" "$R"

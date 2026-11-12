@@ -1,7 +1,7 @@
 """Example 3 — Metalens meta-atom phase library.
 Sweeps the width of a nano-pillar and computes the 0th-order transmission phase
 and amplitude. A good library: the phase should cover 0-2π and the amplitude stay high.
-The output plot is saved to the project's Simulasyonlar/ folder.
+The output plot is saved to examples/output/.
 Run:  python examples/03_metalens_library.py
 """
 import numpy as np, sys, os
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     ax[1].set_ylabel("|t0|"); ax[1].set_title("Transmission amplitude"); ax[1].set_ylim(0, 1.05); ax[1].grid(True, alpha=.3)
     fig.suptitle(f"Meta-atom sweep  (λ={lam0}um, Λ={period}um, H={H}um, n={n_pillar})")
     fig.tight_layout()
-    out = os.path.join(os.path.dirname(__file__), "..", "..", "..", "Simulasyonlar", "meta_atom_phase_library.png")
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "meta_atom_phase_library.png")
     out = os.path.abspath(out)
-    fig.savefig(out, dpi=130)
+    os.makedirs(os.path.dirname(out), exist_ok=True); fig.savefig(out, dpi=130)
     print("Plot saved ->", out)

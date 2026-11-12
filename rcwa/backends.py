@@ -16,7 +16,7 @@ def available():
     """Which accelerators are installed? -> dict."""
     out = {"autograd": False, "jax": False, "jax_gpu": False, "cupy": False, "torch": False, "torch_gpu": False}
     try:
-        import autograd; out["autograd"] = True
+        import autograd; out["autograd"] = True  # noqa: F401  (availability probe)
     except Exception: pass
     try:
         import jax; out["jax"] = True
