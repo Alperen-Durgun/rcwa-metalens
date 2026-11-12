@@ -58,15 +58,22 @@ def test_materials():
 
 
 def test_cache_computes_once():
+    """Second call with the same key is served from disk; a different key recomputes.
+    Uses a private temporary cache folder (never the user's real cache)."""
     from rcwa import cache
-    import numpy as np
+    import tempfile, shutil
     calls = {"n": 0}
     def comp():
         calls["n"] += 1; return {"x": np.arange(4.0)}
-    k = {"unittest": 1, "v": np.random.randint(1_000_000_000)}
-    cache.cached_library("unittest", k, comp)
-    cache.cached_library("unittest", k, comp)
-    assert calls["n"] == 1
+    old = cache.CACHE_DIR; cache.CACHE_DIR = tempfile.mkdtemp(prefix="rcwa_cache_ut_")
+    try:
+        a = cache.cached_library("unittest", {"v": 1}, comp)
+        b = cache.cached_library("unittest", {"v": 1}, comp)
+        assert calls["n"] == 1 and np.array_equal(a["x"], b["x"])
+        cache.cached_library("unittest", {"v": 2}, comp)
+        assert calls["n"] == 2 and cache.clear_cache() == 2
+    finally:
+        shutil.rmtree(cache.CACHE_DIR, ignore_errors=True); cache.CACHE_DIR = old
 
 
 def test_solve_1d_auto_stable():

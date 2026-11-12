@@ -5,6 +5,11 @@
 * Fixed: on Windows the command line crashed with `UnicodeEncodeError` when its output was
   redirected or the console was not UTF-8 (reports contain λ, Σ, θ, ✅). All entry points now
   switch stdout/stderr to UTF-8. Found by the Windows CI job; a regression test was added.
+* Fixed: `inverse_design_deflector` reseeded NumPy's global random generator as a side effect;
+  it and `hologram` (new `seed` parameter) now use local generators, so results are reproducible
+  without touching global state.
+* Tests: the cache test uses a private temporary folder (it failed on a second run because of
+  the reseeding above).
 
 ## 0.2.0
 

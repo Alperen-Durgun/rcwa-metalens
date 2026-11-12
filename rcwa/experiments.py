@@ -496,7 +496,7 @@ def run_inverse_design_deflector(fm, slug):
     def Tt(dens):
         r = solve_scalar_1d(lam0, 0, 1, 1, period, make(dens), H, Mo, "TE", "laurent")
         return r["T"][np.where(r["orders"] == target)[0][0]]
-    import numpy as _np; _np.random.seed(0); T0 = Tt(_np.random.rand(Nseg))
+    T0 = Tt(np.random.default_rng(0).random(Nseg))          # local generator: never reseed the global one
     res = differential_evolution(lambda d: -Tt(d), [(0, 1)] * Nseg, maxiter=maxiter,
                                  popsize=8, seed=1, polish=False, tol=1e-3)
     dens = res.x; eps = make(dens)
@@ -593,7 +593,7 @@ def run_hologram(fm, slug):
     target[(rr > N * 0.18) & (rr < N * 0.24)] = 1.0  # ring
     target[(np.abs(xx - c) < 2) & (yy > c)] = 1.0     # line
     amp = np.sqrt(target); 
-    field = np.exp(1j * 2 * np.pi * np.random.rand(N, N))
+    field = np.exp(1j * 2 * np.pi * np.random.default_rng(int(num(fm, "seed", 0, int))).random((N, N)))
     for _ in range(iters):
         F = np.fft.fftshift(np.fft.fft2(field))
         F = amp * np.exp(1j * np.angle(F))
