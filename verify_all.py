@@ -12,6 +12,9 @@ import numpy as np
 import matplotlib; matplotlib.use("Agg")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from rcwa.cli import utf8_stdio
+utf8_stdio()                      # Windows: a redirected console is cp1252 by default
+
 OK, FAIL = "PASSED", "FAILED"
 rows = []   # (category, name, status, detail)
 def rec(cat, name, ok, detail=""):

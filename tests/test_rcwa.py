@@ -638,6 +638,8 @@ def test_substrate_energy_bookkeeping():
 
 
 if __name__ == "__main__":
+    from rcwa.cli import utf8_stdio
+    utf8_stdio()
     _tests = [(k, v) for k, v in list(globals().items()) if k.startswith("test_") and callable(v)]
     for _name, _fn in _tests:
         _fn(); print(f"{_name}: PASSED")

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+* Fixed: on Windows the command line crashed with `UnicodeEncodeError` when its output was
+  redirected or the console was not UTF-8 (reports contain λ, Σ, θ, ✅). All entry points now
+  switch stdout/stderr to UTF-8. Found by the Windows CI job; a regression test was added.
+
 ## 0.2.0
 
 A correctness and structure release. Several results change with respect to 0.1.0 — in every

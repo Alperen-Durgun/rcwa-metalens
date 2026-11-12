@@ -27,4 +27,4 @@ __all__ = ["convmat1d", "convmat2d", "redheffer_star", "homogeneous_modes",
            "solve_rcwa_1d", "solve_rcwa_2d", "solve_1d_auto", "solve_2d_auto", "solve_scalar_1d",
            "materials", "cache", "metrics", "shapes", "gds", "fullwave", "modes_from_ER_cached", "parallel_map",
            "convention", "design", "to_physical", "physical_phase"]
-__version__ = "0.2.0"
+__version__ = "0.2.1"

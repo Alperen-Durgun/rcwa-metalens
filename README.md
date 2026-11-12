@@ -101,7 +101,7 @@ Details, definitions of every metric and accuracy guidance: [docs/conventions.md
 ## Validation
 
 ```bash
-pytest                              # 48 unit tests + 29 end-to-end tests
+pytest                              # 48 unit tests + 30 end-to-end tests
 python verify_all.py                # human-readable pass/fail table of everything
 ```
 

@@ -13,6 +13,16 @@ From a clone without installing:  python metadesign.py <same arguments>
 import os, sys, re, inspect, difflib
 
 
+def utf8_stdio():
+    """Make stdout/stderr UTF-8. Reports contain λ, Σ, θ, ✅ ...; on Windows a redirected or
+    legacy console defaults to cp1252 and printing them would raise UnicodeEncodeError."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
 def _balanced(src, start):
     """Text of the argument that starts at src[start], up to the matching ',' or ')'."""
     depth = 0; i = start; quote = None
@@ -73,6 +83,7 @@ def _print_help(R, name):
 
 
 def main(argv=None):
+    utf8_stdio()
     argv = list(sys.argv[1:] if argv is None else argv)
     if "--version" in argv:
         from . import __version__

@@ -1098,6 +1098,8 @@ def _is_pending(fm):
 
 
 def main(argv):
+    from .cli import utf8_stdio
+    utf8_stdio()
     args = argv[1:]
     if args and args[0] != "--all":
         run_file(args[0]); return

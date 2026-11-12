@@ -82,6 +82,21 @@ def test_cli_runs_and_reports():
     assert cli.main(["grating", "perod=1.3"]) == 2          # typo is rejected, not ignored
 
 
+def test_console_output_survives_cp1252():
+    """Windows regression: with a cp1252 (non-UTF-8) stdout — the default when output is
+    redirected — the command line must still print its Greek letters and check marks."""
+    import subprocess
+    env = dict(os.environ, PYTHONIOENCODING="cp1252", PYTHONUTF8="0")
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for args in (["list"], ["grating", "period=1.3"], ["help", "fov_analysis"]):
+        p = subprocess.run([sys.executable, os.path.join(root, "metadesign.py")] + args,
+                           env=env, cwd=root, capture_output=True)
+        assert p.returncode == 0, p.stderr.decode("utf-8", "replace")[-400:]
+    assert "polarization_multiplexed" in subprocess.run(
+        [sys.executable, os.path.join(root, "metadesign.py"), "list"], env=env, cwd=root,
+        capture_output=True).stdout.decode("utf-8")
+
+
 def test_note_workflow_roundtrip():
     """An experiment note with status 'bekliyor' is run, a report is written, the note is marked done."""
     os.makedirs(R.DENEYLER, exist_ok=True)
@@ -117,6 +132,8 @@ def test_note_workflow_english_keys():
 
 
 if __name__ == "__main__":
+    from rcwa.cli import utf8_stdio
+    utf8_stdio()
     import time
     _tests = [(k, v) for k, v in list(globals().items()) if k.startswith("test_") and callable(v)]
     for _name, _fn in _tests:

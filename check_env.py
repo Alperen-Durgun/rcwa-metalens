@@ -2,6 +2,7 @@
 Usage: python check_env.py
 """
 import importlib
+import sys
 
 # (module, required?, which feature it enables)
 CHECKS = [
@@ -20,6 +21,11 @@ CHECKS = [
 
 
 def main():
+    for _s in (sys.stdout, sys.stderr):           # Windows: a redirected console is cp1252 by default
+        try:
+            _s.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     print("=" * 62)
     print("RCWA METALENS — ENVIRONMENT CHECK")
     print("=" * 62)
