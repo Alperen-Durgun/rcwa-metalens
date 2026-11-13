@@ -962,6 +962,22 @@ def test_drc_profiles_and_aspect_ratio():
     except ValueError:
         pass
 
+
+def test_lpa_metagrating_tool():
+    """P3 tool checks (not the physics result): identical pillars diffract nothing into +-1;
+    mirroring the cell order swaps the two first orders; the LPA formula gives sinc^2(pi/N) for
+    ideal unit-amplitude phases."""
+    from rcwa import design as dz, lpa
+    lib = dz.meta_atom_library(0.633, 0.35, 0.6, sizes=np.linspace(0.06, 0.29, 8), material="TiO2_t", M=3)
+    r = lpa.supercell_deflection(lib, np.array([3, 3, 3]), M_per_cell=2)
+    assert r["T_design"] < 1e-20 and r["T_other"] < 1e-20
+    idx = lpa.metagrating_cells(lib, 3)
+    a = lpa.supercell_deflection(lib, idx, M_per_cell=2); b = lpa.supercell_deflection(lib, idx[::-1], M_per_cell=2)
+    assert abs(a["T_design"] - b["T_other"]) < 1e-10 and abs(a["T_other"] - b["T_design"]) < 1e-10
+    ideal = {"t": np.exp(2j * np.pi * np.arange(4) / 4), "n_sub": 1.0, "n_bg": 1.0}
+    d = lpa.lpa_deflection(ideal, np.arange(4))
+    assert abs(d["ideal_sampling"] - 1) < 1e-12 and abs(d["cellwise"] - np.sinc(0.25) ** 2) < 1e-12
+
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio
     utf8_stdio()
