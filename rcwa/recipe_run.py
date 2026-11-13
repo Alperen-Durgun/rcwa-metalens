@@ -394,7 +394,7 @@ def run_recipe(spec, out_dir, validation_dir="auto", n_jobs=None, log=print):
                      "sizes_used_um": [float(s) for s in used]}
 
     vrec = find_validation_records(validation_dir, plat, lam0, H, L, fab["sidewall_deg"], residual)
-    vrec["dir"] = os.path.relpath(validation_dir, pkg_root) if validation_dir else None
+    vrec["dir"] = _display_path(validation_dir, pkg_root) if validation_dir else None
 
     log("[6/10] performance (LPA) and error budget")
     a = dz.analyze_focus(d, nz=NZ)
@@ -461,6 +461,16 @@ def run_recipe(spec, out_dir, validation_dir="auto", n_jobs=None, log=print):
     res["trust"] = {"level": level, "checks": checks, "next_level_needs": missing}
     res["status"] = "ok"
     return _finish(res, spec, out_dir, validation_dir, pkg_root, log)
+
+
+def _display_path(path, root):
+    """path relative to root for the report; the absolute path when that is impossible (on
+    Windows a path on another drive has no relative form) or leaves root."""
+    try:
+        rel = os.path.relpath(path, root)
+    except ValueError:
+        return os.path.abspath(path)
+    return os.path.abspath(path) if rel.startswith("..") else rel.replace(os.sep, "/")
 
 
 def _cell_name(name):

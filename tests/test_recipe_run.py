@@ -252,3 +252,15 @@ def test_recipe_with_repository_records_reaches_t2(tmp_path):
     assert eb["terms"]["model"]["z_focus"] == pytest.approx(rel * nom["z_focus"], rel=1e-12)
     rep = (tmp_path / "t2" / "report.md").read_text(encoding="utf-8")
     assert "Trust level: **T2**" in rep and "Budget complete for trust level T2: yes" in rep and "not measured" in rep
+
+
+def test_display_path_handles_other_drives(monkeypatch, tmp_path):
+    """CI found it: on Windows os.path.relpath raises ValueError for a path on another drive."""
+    root = tmp_path / "pkg"; (root / "validation").mkdir(parents=True)
+    assert rr._display_path(str(root / "validation"), str(root)) == "validation"
+    assert rr._display_path(str(tmp_path / "elsewhere"), str(root)) == os.path.abspath(str(tmp_path / "elsewhere"))
+
+    def boom(*a, **k):
+        raise ValueError("path is on mount 'D:', start on mount 'C:'")
+    monkeypatch.setattr(rr.os.path, "relpath", boom)
+    assert rr._display_path(str(root / "validation"), str(root)) == os.path.abspath(str(root / "validation"))
