@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+### Added — one-command recipe with manifest and trust level (roadmap S1-S3)
+
+* `rcwa-metalens recipe spec.yaml [--out DIR] [--jobs N]` (`rcwa/recipe_run.py`,
+  `docs/recipe_pipeline.md`, example `docs/recipe_spec_example.yaml`): specification -> recipe
+  folder with `report.md` (plan sections R1-R10, trust level first), `recipe.json` (all
+  numbers), `lens.gds` and `manifest.json` (code version and commit, normalized specification
+  and hash, material data hash, validation record hashes, output hashes).
+* Steps: validated specification (unknown keys refused); sourced platform data; unit cell
+  fixed or searched under the DRC profile, the sub-wavelength condition and the lens NA
+  (L <= lam0 / 2NA); refined library with convergence certificate, certified sizes only;
+  robust design; focal analysis; process window (size bias, random size error, film index
+  shift with RCWA re-solve of the used sizes); matching validation records; reproducible GDS
+  read back; DRC with aspect ratio. An infeasible specification gives a report with the
+  reason (exit code 3).
+* Trust level T0-T2 from an explicit checklist (plan section 7); T3 needs fabrication data
+  and is never assigned. T2 also needs an error budget (roadmap T2, next), so recipes are T1
+  for now.
+* Reproducibility checked: byte-identical `report.md`, `recipe.json`, `lens.gds` with a warm
+  and an empty library cache and with 1 and 2 worker processes. `gds.layout_to_gds` and
+  `gdswriter.write_gds` take `timestamp=` (default unchanged: now).
+* Checked against V2: the specification of the V2 lens (D 6 / f 6 um) reproduces its LPA
+  numbers exactly (focus 5.167 um, FWHM 646 nm, Strehl 0.914). A 2 x 2 search
+  (H 0.55/0.60, L 0.35/0.375) picks 600/375 with robust FOM 0.948, as `recipe_search` did.
+* Validation records: `lam0` (0.633 um, the example-20 default every V2 run used) added to the
+  V2 records and written by example 20 from now on; the two V2 records analysed before the
+  focal-analysis fix moved to `validation/superseded/` (README there).
+* New tests `tests/test_recipe_run.py` (24), run in CI. `sigma_nm: 0` gives a nominal
+  (complex-match) selection and, correctly, trust level T0.
+
 ### Fixed — focal analysis window bias (found by V2)
 
 * `design.FocalField`: on-axis values (`on_axis`, `find_focus`, `strehl_at_focus`, depth of

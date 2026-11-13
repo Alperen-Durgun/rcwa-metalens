@@ -230,7 +230,7 @@ print(f"\nV2 {'PASSED' if ok else 'FAILED'} (focus within 3 %, FWHM within 5 %)"
 os.makedirs("validation", exist_ok=True)
 out = os.path.join("validation", f"V2_lens_D{D:g}_f{F:g}_{a.material}_{datetime.date.today().isoformat()}.json")
 json.dump({"passed": ok, "lpa": lpa, "fdtd": fd, "D": Dl, "f": F, "L": L, "H": H, "n_sub": n_sub,
-           "material": a.material, "steps": a.steps, "run_time": a.run_time, "estimated_cost_fc": float(cost),
+           "lam0": LAM0, "material": a.material, "steps": a.steps, "run_time": a.run_time, "estimated_cost_fc": float(cost),
            "aperture": "PEC film, hole radius D/2 + L/2", "tidy3d_version": td.__version__,
            "final_decay": float(getattr(data, "final_decay_value", np.nan)), "diagnostic": diag}, open(out, "w"), indent=1)
 print(f"Record written: {out}")

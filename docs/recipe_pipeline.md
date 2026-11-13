@@ -1,0 +1,62 @@
+# Recipe pipeline
+
+```
+rcwa-metalens recipe spec.yaml [--out DIR] [--jobs N]
+```
+
+turns a specification (example: [`recipe_spec_example.yaml`](recipe_spec_example.yaml)) into a
+recipe folder (default `recipes/<name>/`):
+
+| File | Content |
+|---|---|
+| `report.md` | the recipe report, sections R1-R10 of the plan, trust level first |
+| `recipe.json` | every number in the report, plus the library table and all unit-cell candidates |
+| `lens.gds` | the mask layout (hierarchical GDSII, layer 1/0, fixed date) |
+| `manifest.json` | traceability: code version and commit, normalized specification and its hash, material data hash, validation record hashes, hashes of the files above |
+
+Exit code 0: recipe written; 3: the specification cannot be met (the report says why); 2: the
+specification is invalid (unknown key, missing value, wrong type or range - nothing is guessed).
+
+## Steps
+
+| Step | What happens | Plan |
+|---|---|---|
+| 1 Specification | all keys checked, defaults filled in | - |
+| 2 Platform | material provenance (reference, licence, data file hash), indices at the wavelength; a wavelength outside the data range is refused | R1 |
+| 3 Unit cell | the fixed cell, or every cell of the search, is checked against the DRC profile (min feature, min gap, aspect ratio), the sub-wavelength condition and the lens NA (L <= lam0 / 2NA); feasible cells get a refined, certified library and a robust figure of merit; `recipe.recommend` chooses | R2 |
+| 4 Library | refined adaptively (resonances located), convergence certificate M vs M+2 on every size; sizes that fail are not used | R3 |
+| 5 Lens design | hyperbolic phase, robust atom selection for the stated size error, from certified sizes only | R4 |
+| 6 Performance | focal analysis (`design.analyze_focus`): focus, FWHM, Strehl, absolute and relative efficiency | R5 |
+| 7 Process window | uniform size bias (+-bias, +-bias/2), random size error (Monte Carlo), film index +-dn (used sizes re-solved with RCWA) | R6 |
+| 8 Validation | full-wave records in `validation/` that match material, wavelength, H, L and substrate | R8 |
+| 9 Fabrication | GDS written and read back, DRC against the named profile including aspect ratio | R7 |
+| 10 Report | trust level with the checklist behind it; manifest | R9, R10 |
+
+## Trust level
+
+| Level | Requires (all) |
+|---|---|
+| T0 | - |
+| T1 | material data from a cited source (shipped dataset or your registered measurement; the approximate built-in tables do not count); every size the lens uses passes the convergence certificate; refined library; robust selection; process window evaluated; DRC clean |
+| T2 | T1 + a passed unit-cell FDTD record (V1) and a passed small-lens FDTD record (V2) for this platform + an error budget on the performance numbers |
+| T3 | T2 + calibration with fabrication data (SEM sizes, measured optics; roadmap F4) - never assigned by the pipeline |
+
+The report lists every requirement as met or not and names what the next level needs.
+
+## What the numbers mean
+
+* Performance and process-window numbers come from the locally periodic approximation (each
+  pillar simulated in an infinite array of identical neighbours) with scalar propagation. For
+  the 633 nm TiO2 recipe the small-lens FDTD comparison (V2) found the focus 2-3 % beyond the
+  FDTD focus and the relative efficiency 2.3-2.7 points above it; see the R8 section of a report.
+* The validation records validate the *platform* (material, wavelength, H, L, substrate), not
+  the particular lens of a recipe. They exist for vertical pillars without a residual film; a
+  recipe with a tapered sidewall or a residual film has no applicable record.
+* The convergence certificate compares M with M+2; it estimates the truncation error, it is not
+  a bound.
+* Size errors in the process window use the interpolated refined library (no extra solves);
+  pillars pushed outside the library range get the response of the library end, and the report
+  gives their fraction.
+* Reproducibility: the same specification, code commit and environment give byte-identical
+  `report.md`, `recipe.json` and `lens.gds` (checked with a warm and an empty library cache and
+  with 1 and 2 worker processes). `manifest.json` differs only in `created_utc`.

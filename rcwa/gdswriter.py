@@ -43,8 +43,9 @@ def _ascii(s):
     return b
 
 
-def _timestamp():
-    t = datetime.datetime.now()
+def _timestamp(t=None):
+    """BGNLIB/BGNSTR date record. t=None: now; a datetime: that date (reproducible files)."""
+    t = datetime.datetime.now() if t is None else t
     vals = [t.year, t.month, t.day, t.hour, t.minute, t.second] * 2
     return struct.pack(">12h", *vals)
 
@@ -55,7 +56,7 @@ def _atom_key(p):
 
 
 def write_gds(placements, filepath, cell_name="METALENS", layer=1, datatype=0,
-              unit=1e-6, precision=1e-9, n_circle=48, hierarchical=True):
+              unit=1e-6, precision=1e-9, n_circle=48, hierarchical=True, timestamp=None):
     """placements: [{x,y,shape,params,angle}] (um). Writes a GDSII file in pure Python.
     unit=1e-6 (um user unit), precision=1e-9 (nm database unit).
 
@@ -64,9 +65,11 @@ def write_gds(placements, filepath, cell_name="METALENS", layer=1, datatype=0,
     only a few dozen distinct atoms, so the file shrinks from ~415 to ~30 bytes per pillar
     (>10x) and loads much faster in layout tools. hierarchical=False writes one flat
     polygon per pillar (some simple viewers/converters prefer that).
+    timestamp: None writes the current date; a datetime writes that date instead, so the same
+    layout gives a byte-identical file (used by the recipe pipeline).
     Returns: number of pillars written (= polygons after flattening)."""
     dbscale = unit / precision                     # 1um -> 1000 db units (nm)
-    ts = _timestamp()
+    ts = _timestamp(timestamp)
     r_bnd = _rec(0x08, 0x00); r_lay = _rec(0x0D, 0x02, struct.pack(">h", layer))
     r_dt = _rec(0x0E, 0x02, struct.pack(">h", datatype)); r_end = _rec(0x11, 0x00)
 

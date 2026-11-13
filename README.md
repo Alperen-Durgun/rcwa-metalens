@@ -61,6 +61,17 @@ Results (figure, GDS, design JSON) go to `./workspace/outputs`; choose another p
 `--out DIR` or the `RCWA_PROJECT_DIR` environment variable. Lengths are in micrometres,
 angles in degrees. A mistyped parameter is rejected with a suggestion instead of being ignored.
 
+### Recipe — specification to mask in one command
+
+```bash
+rcwa-metalens recipe docs/recipe_spec_example.yaml --out recipes/lens633
+```
+
+writes `report.md` (platform, unit cell, certified library, design, performance, process
+window, validation records, DRC; trust level T0-T2 first), `recipe.json`, `lens.gds` and a
+`manifest.json` with the hashes of inputs and outputs. Same specification and code give
+byte-identical files. See [docs/recipe_pipeline.md](docs/recipe_pipeline.md).
+
 ### Python — design a lens
 
 ```python

@@ -1,0 +1,37 @@
+# Example recipe specification for `rcwa-metalens recipe <this file>`.
+# Lengths in um, angles in degrees. Keys not listed here are refused.
+# Only `name`, `wavelength_um`, `material`, `lens` and a unit cell (or a search) are required;
+# every other value below is the default.
+
+name: lens633_D20_f40
+wavelength_um: 0.633
+material: TiO2_Siefke           # rcwa.materials name; must cover the wavelength
+substrate: SiO2_Malitson         # or "air"; light enters from the substrate, exits into air
+
+lens:
+  diameter_um: 20.0
+  focal_um: 40.0                 # NA = sin(atan(D / 2f)); the period must satisfy L <= lam0 / (2 NA)
+
+unit_cell:                       # either a fixed cell ...
+  shape: circle
+  height_um: 0.60
+  period_um: 0.375
+# search:                        # ... or a search (then leave unit_cell height/period out);
+#   height_um: [0.50, 0.55, 0.60]   # the best cell is chosen by recipe.recommend
+#   period_um: [0.35, 0.375]
+
+fabrication:
+  drc_profile: recipe_search_default   # built-in name or a YAML path (docs/drc_profile_template.yaml)
+  sidewall_deg: 90.0             # < 90: tapered pillar (size = mid-height width)
+  residual: null                 # [material, thickness_um]: film left by an incomplete etch
+
+tolerance:
+  sigma_nm: 3.0                  # random size error the atom selection is robust to
+  bias_nm: 4.0                   # uniform size bias evaluated in the process window (+-)
+  index_dn: 0.02                 # film index shift evaluated in the process window (+-)
+  n_trial: 10                    # Monte Carlo trials for the random size error
+  seed: 0
+
+numerics:
+  M: 9                           # RCWA Fourier orders (half-number); certified against M + 2
+  n_sizes: 20                    # initial library sweep before adaptive refinement

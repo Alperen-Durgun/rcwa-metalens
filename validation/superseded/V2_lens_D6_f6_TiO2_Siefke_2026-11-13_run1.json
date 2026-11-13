@@ -25,5 +25,6 @@
  "estimated_cost_fc": 0.25816493325521284,
  "aperture": "PEC film, hole radius D/2 + L/2",
  "tidy3d_version": "2.12.2",
- "final_decay": 6.12e-06
+ "final_decay": 6.12e-06,
+ "lam0": 0.633
 }

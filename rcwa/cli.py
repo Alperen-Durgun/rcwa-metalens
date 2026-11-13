@@ -4,6 +4,9 @@
     rcwa-metalens help <type>                  # parameters of one type, with defaults
     rcwa-metalens <type> [key=value ...]       # run one experiment
     rcwa-metalens run --all | <note.md>        # note workflow (see rcwa/experiments.py)
+    rcwa-metalens recipe <spec.yaml> [--out DIR] [--jobs N]
+                                               # specification -> recipe folder (report, GDS,
+                                               # manifest, trust level); docs/recipe_pipeline.md
 
 Options:  --out DIR   write experiments/reports/outputs under DIR (same as $RCWA_PROJECT_DIR)
           --name N    name the figure/report files N.png / N.md (default CLI_<type>, no .md)
@@ -94,6 +97,8 @@ def main(argv=None):
     if "--version" in argv:
         from . import __version__
         print(__version__); return 0
+    if argv and argv[0] == "recipe":
+        return recipe_main(argv[1:])
     if "--out" in argv:
         i = argv.index("--out")
         if i + 1 >= len(argv):
@@ -156,6 +161,43 @@ def main(argv=None):
             f.write(f"# {cmd} — {name}\n\nParameters: {fm or 'defaults'}\n\n{body}\n\n**Summary:** {summary}\n")
         print(f"Report:  {md}")
     return 0
+
+
+def recipe_main(args):
+    """rcwa-metalens recipe <spec.yaml> [--out DIR] [--jobs N]. Exit code 0 = recipe written
+    (status ok), 3 = specification infeasible (report written), 2 = bad arguments/spec."""
+    from .recipe_run import run_recipe, SpecError, load_spec
+    out = None; jobs = None; rest = []
+    i = 0
+    while i < len(args):
+        if args[i] in ("--out", "--jobs"):
+            if i + 1 >= len(args):
+                print(f"{args[i]} needs a value"); return 2
+            if args[i] == "--out":
+                out = args[i + 1]
+            else:
+                try:
+                    jobs = int(args[i + 1])
+                except ValueError:
+                    print("--jobs needs an integer"); return 2
+            i += 2
+        else:
+            rest.append(args[i]); i += 1
+    if len(rest) != 1 or rest[0] in ("-h", "--help"):
+        print("usage: rcwa-metalens recipe <spec.yaml> [--out DIR] [--jobs N]\n"
+              "See docs/recipe_pipeline.md and docs/recipe_spec_example.yaml."); return 0 if rest[:1] in (["-h"], ["--help"]) else 2
+    try:
+        spec = load_spec(rest[0])
+    except (SpecError, OSError) as e:
+        print(f"specification error: {e}"); return 2
+    out = out or os.path.join("recipes", re.sub(r"[^A-Za-z0-9_.-]+", "_", spec["name"]))
+    try:
+        res = run_recipe(spec, out, n_jobs=jobs)
+    except SpecError as e:
+        print(f"specification error: {e}"); return 2
+    print(f"\nstatus: {res['status']}" + (f"  trust level: {res['trust']['level']}" if res.get("trust") else "")
+          + f"\nfolder: {out}")
+    return 0 if res["status"] == "ok" else 3
 
 
 def main_entry():

@@ -42,6 +42,9 @@ jobs:
       - name: Unit tests (solvers, design core, GDS, materials)
         run: pytest tests/test_rcwa.py
 
+      - name: Recipe pipeline tests (specification, trust level, reproducible end-to-end run)
+        run: pytest tests/test_recipe_run.py
+
       - name: End-to-end tests (all 25 generators, CLI, note workflow)
         run: pytest tests/test_experiments.py
 

@@ -7,14 +7,15 @@ safe, no gdstk required, no temp file/move. READ (validation): gdstk (if availab
 
 
 def layout_to_gds(placements, filepath, cell_name="METALENS", layer=1, datatype=0, unit=1e-6,
-                  hierarchical=True):
+                  hierarchical=True, timestamp=None):
     """placements: [{x,y,shape,params,angle}] (um). Writes a GDS file (pure-Python).
     unit=1e-6 -> coordinates in microns. hierarchical=True stores each distinct meta-atom once
     and references it (>10x smaller files); False writes flat polygons.
+    timestamp: None = now; a datetime gives a reproducible (byte-identical) file.
     Returns: number of pillars written."""
     from .gdswriter import write_gds
     return write_gds(placements, filepath, cell_name=cell_name, layer=layer,
-                     datatype=datatype, unit=unit, hierarchical=hierarchical)
+                     datatype=datatype, unit=unit, hierarchical=hierarchical, timestamp=timestamp)
 
 
 def read_gds_summary(filepath):
