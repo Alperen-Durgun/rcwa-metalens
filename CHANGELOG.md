@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Tooling — benchmark suite (roadmap N5)
+
+* `benchmarks/run.py`: four fixed problems (1D slab against Fresnel, 2D pillar at M = 9 with
+  and without the symmetry reduction, the default 20-size library, the default 16 µm lens).
+  `--check` fails when a value drifts from `benchmarks/baseline.json`; times are only reported.
+  Runs in CI. Baseline from the reference laptop (Windows, i5-5200U): the M = 9 pillar takes
+  0.64 s reduced vs 5.33 s full (8.3×); the whole default lens 40 s. Linux vs Windows values
+  agree to 1e-12.
+
+### Accuracy — Li factorization for circles (roadmap N4)
+
+* Measured, no code change: with ≥ 60 nm between pillars the Li (zigzag) factorization
+  converges geometrically for circles (phase error at M = 7 against M = 15: 0.005 rad at
+  150 nm, 0.007 rad at 250 nm, 0.018 rad at 290 nm). The slow convergence at 300 nm came from a
+  gap resonance, not from the factorization (see the defaults entry). A normal-vector
+  factorization is therefore not needed now; revisit for metals or touching pillars.
+
 ### Changed defaults — results change (roadmap U4); re-run designs
 
 Measured for the 16 µm TiO₂ test lens (λ = 633 nm, Λ = 350 nm, H = 600 nm, f = 20 µm) on the

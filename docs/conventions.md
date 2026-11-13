@@ -113,6 +113,8 @@ referenced to the plane of the actual maximum.
 * **Symmetry.** Normal incidence + pure x/y polarization + a mirror-symmetric cell is solved
   in the parity subspace automatically (`res["symmetry"]`); identical results, 7–10× faster
   at M = 7–9.
+* **Circles.** Li's zigzag rule is exact only for axis-aligned walls, but for circles with
+  ≥ 60 nm gaps it still converges geometrically (≤ 0.018 rad at M = 7 against M = 15).
 * **Raster.** A binary pixel mask quantizes the pillar size to `L/N`. The designers use
   `shapes.DEFAULT_N = 512` samples per period (0.7 nm at L = 0.35 µm). The solver cost does
   not depend on N. Coarse grids produce stair-stepped phase-versus-size curves.
