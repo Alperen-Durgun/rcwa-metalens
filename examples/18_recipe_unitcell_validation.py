@@ -23,6 +23,8 @@ import sys, os, json, argparse, datetime
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rcwa import design, materials
+from rcwa.cli import utf8_stdio
+utf8_stdio()        # Tidy3D prints arrows; a redirected Windows console is cp1252 by default
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--material", default="TiO2_Siefke"); ap.add_argument("--lam0", type=float, default=0.633)
@@ -32,6 +34,11 @@ ap.add_argument("--s-min", type=float, default=0.06); ap.add_argument("--min-gap
 ap.add_argument("--n", type=int, default=5); ap.add_argument("--keep-away", type=float, default=8.0)
 ap.add_argument("--M", type=int, default=11); ap.add_argument("--steps", type=int, default=20)
 ap.add_argument("--run", action="store_true")
+ap.add_argument("--load", action="store_true", help="analyse a finished batch from disk (no new run, no cost)")
+ap.add_argument("--sizes", type=float, nargs="*", help="explicit test sizes (um) instead of the automatic pick")
+ap.add_argument("--run-time", type=float, default=2.0e-12, help="FDTD run time (s)")
+ap.add_argument("--offset", type=float, default=None, help="use this constant phase (rad) instead of fitting it")
+ap.add_argument("--tag", default="", help="suffix of the result folder and record")
 a = ap.parse_args()
 if a.shape != "circle":
     sys.exit("only circular pillars are set up for FDTD here")
@@ -58,6 +65,9 @@ if res:
     near = round(r0["lo"] - 0.004, 4)                    # 4 nm below the band edge
 judged = list(sizes)
 all_sizes = sizes + ([near] if near else [])
+if a.sizes:                                             # explicit sizes: judged unless near a resonance
+    all_sizes = [float(v) for v in a.sizes]
+    judged = [v for v in all_sizes if all((v < r["lo"] - a.keep_away * 1e-3) or (v > r["hi"] + a.keep_away * 1e-3) for r in res)]
 t_hi = design.meta_atom_library(LAM0, L, H, sizes=all_sizes, material=MAT, n_sub=n_sub, M=a.M)["t"]
 t_bare = design.meta_atom_library(LAM0, L, H, sizes=[0.1], n_pillar=1.0, n_sub=n_sub, M=a.M)["t"][0]
 t_rcwa = t_hi / t_bare
@@ -94,20 +104,25 @@ def make_sim(size, steps):
     st = [substrate] + ([] if size is None else [td.Structure(
         geometry=td.Cylinder(center=(0, 0, z_p), radius=size / 2, length=H, axis=2), medium=pillar_medium)])
     return td.Simulation(size=(L, L, sz), grid_spec=td.GridSpec.auto(min_steps_per_wvl=steps),
-                         structures=st, sources=[source], monitors=[monitor], run_time=2.0e-12,
+                         structures=st, sources=[source], monitors=[monitor], run_time=a.run_time,
                          boundary_spec=bounds)
 
 
 sims = {"bare": make_sim(None, a.steps)}
 for s in all_sizes:
     sims[f"s_{s*1000:.1f}"] = make_sim(s, a.steps)
-batch = web.Batch(simulations=sims, folder_name="rcwa_recipe_unitcell")
-cost = batch.estimate_cost()
-print(f"\n{len(sims)} simulations. *** Estimated cost: {cost:.3f} FlexCredit ***")
-if not a.run:
-    sys.exit("Estimate only. Add --run to spend credits.")
-
-data = batch.run(path_dir=os.path.join("workspace", "tidy3d_recipe"))
+PATH_DIR = os.path.join("workspace", "tidy3d_recipe" + (f"_{a.tag}" if a.tag else ""))
+if a.load:
+    batch = web.Batch.from_file(os.path.join(PATH_DIR, "batch.hdf5"))
+    data = batch.load(path_dir=PATH_DIR); cost = float("nan")
+    print("\nLoaded the finished batch from disk (no new run).")
+else:
+    batch = web.Batch(simulations=sims, folder_name="rcwa_recipe_unitcell" + (f"_{a.tag}" if a.tag else ""))
+    cost = batch.estimate_cost()
+    print(f"\n{len(sims)} simulations. *** Estimated cost: {cost:.3f} FlexCredit ***")
+    if not a.run:
+        sys.exit("Estimate only. Add --run to spend credits.")
+    data = batch.run(path_dir=PATH_DIR)
 uni = -L / 2 + (np.arange(64) + 0.5) * L / 64
 
 
@@ -121,19 +136,23 @@ def mean_Ey(d):
 ref = mean_Ey(data["bare"])
 t_fdtd = np.array([mean_Ey(data[f"s_{s*1000:.1f}"]) / ref for s in all_sizes])
 jm = np.array([s in judged for s in all_sizes])
-offset = np.angle(np.sum(t_rcwa[jm] * np.conj(t_fdtd[jm])))
+offset = a.offset if a.offset is not None else np.angle(np.sum(t_rcwa[jm] * np.conj(t_fdtd[jm])))
+decay = {k: getattr(data[k], "final_decay_value", None) for k in sims}
 dphi = np.angle(t_rcwa * np.conj(t_fdtd) * np.exp(-1j * offset)); damp = np.abs(t_rcwa) - np.abs(t_fdtd)
 ok = bool(np.all(np.abs(damp[jm]) < TOL_AMP) and np.all(np.abs(dphi[jm]) < TOL_PHASE))
-print(f"\nRESULT (fitted constant phase {offset:+.4f} rad; expected ~0 with the bare-interface reference)")
+print(f"\nRESULT ({'given' if a.offset is not None else 'fitted'} constant phase {offset:+.4f} rad; expected ~0 with the bare-interface reference)")
+print("  final field decay per task (shutoff 1e-5): " + ", ".join(f"{k}={v:.1e}" for k, v in decay.items() if v is not None))
 for i, s in enumerate(all_sizes):
     v = ("PASS" if abs(damp[i]) < TOL_AMP and abs(dphi[i]) < TOL_PHASE else "FAIL") if jm[i] else "reported"
     print(f"  {s*1000:6.1f} nm  |t| RCWA {abs(t_rcwa[i]):.4f} FDTD {abs(t_fdtd[i]):.4f}  d|t| {damp[i]:+.4f}  dphase {dphi[i]:+.4f}  {v}")
 print(f"\nRECIPE UNIT-CELL VALIDATION {'PASSED' if ok else 'FAILED'}")
 os.makedirs("validation", exist_ok=True)
-out = os.path.join("validation", f"V1r_{MAT}_{LAM0*1000:.0f}_{H*1000:.0f}_{L*1000:.0f}_{datetime.date.today().isoformat()}.json")
+out = os.path.join("validation", f"V1r_{MAT}_{LAM0*1000:.0f}_{H*1000:.0f}_{L*1000:.0f}{'_' + a.tag if a.tag else ''}_{datetime.date.today().isoformat()}.json")
 json.dump({"passed": ok, "material": MAT, "lam0": LAM0, "H": H, "L": L, "n_sub": n_sub, "M": a.M,
            "fdtd_steps": a.steps, "sizes_um": all_sizes, "judged": jm.tolist(),
            "t_rcwa": [[z.real, z.imag] for z in t_rcwa], "t_fdtd": [[z.real, z.imag] for z in t_fdtd],
            "phase_offset_rad": float(offset), "d_amp": damp.tolist(), "d_phase_rad": dphi.tolist(),
-           "estimated_cost_fc": float(cost), "tidy3d_version": td.__version__}, open(out, "w"), indent=1)
+           "estimated_cost_fc": float(cost), "run_time_s": a.run_time, "phase_offset_given": a.offset is not None,
+           "final_decay": {k: (float(v) if v is not None else None) for k, v in decay.items()},
+           "tidy3d_version": td.__version__}, open(out, "w"), indent=1)
 print(f"Record written: {out}")

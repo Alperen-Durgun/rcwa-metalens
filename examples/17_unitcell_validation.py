@@ -23,6 +23,8 @@ import sys, os, json, datetime
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rcwa import design
+from rcwa.cli import utf8_stdio
+utf8_stdio()        # Tidy3D prints arrows; a redirected Windows console is cp1252 by default
 
 # ----------------------------------------------------------------------------- set-up
 LAM0, L, H, MAT, SHAPE = 0.633, 0.35, 0.60, "TiO2_t", "circle"

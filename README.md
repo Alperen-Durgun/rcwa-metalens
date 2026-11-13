@@ -140,7 +140,12 @@ the physics convention; one constant reference-plane phase is fitted and removed
 | 215 nm (6 nm from the 221 nm resonance; not judged) | 0.9140 | 0.9021 | +0.0119 | +0.003 |
 
 Acceptance was |Δ|t|| < 0.02 and |Δphase| < 0.1 rad; the largest deviations are 0.0034 and
-0.034 rad. Refining the FDTD grid (20 → 30 steps per wavelength) moved the 250 nm result by
+0.034 rad.
+
+**FDTD — a recipe on a substrate (passed).** The recipe recommended by `recipe_search` for ALD
+TiO₂ at 633 nm (H = 600 nm, L = 375 nm, fused-silica substrate) agrees with Tidy3D within
+0.0022 in |t| and 0.0094 rad at five sizes (`examples/18`, records in `validation/`); 4 nm from
+a resonance the difference grows to 0.089 rad. Refining the FDTD grid (20 → 30 steps per wavelength) moved the 250 nm result by
 0.0007 in |t| and 0.011 rad, the same order as the RCWA–FDTD differences. Scope: one material,
 one wavelength, normal incidence, no substrate. **Not yet repeated for this version:** focusing
 of a small 3D lens (V2, `examples/16_lens_focus_fdtd.py`).

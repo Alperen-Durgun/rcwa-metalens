@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Validation — the recommended 633 nm recipe against FDTD
+
+* Recipe: ALD TiO₂ (Siefke data), circles, H = 600 nm, L = 375 nm, on fused silica, light from
+  the substrate. `examples/18` picked five sizes spread over the phase circle (145–298 nm) and
+  one 4 nm from the 311 nm resonance band (reported only); RCWA M = 11, Tidy3D 2.12.2, 20 steps
+  per wavelength. Records: `validation/V1r_TiO2_Siefke_633_600_375_*.json`.
+* **Passed:** largest |Δ|t|| 0.0022 and |Δphase| 0.0094 rad (limits 0.02 / 0.1). The fitted
+  constant phase is −0.027 rad: with the bare-interface reference it should be ~0, an
+  independent confirmation of the phase convention.
+* Two tasks next to the resonance had not decayed to the 1e-5 shutoff (4.6e-4, 2.1e-4). Re-run
+  with 6 ps: 298 nm still passes (|Δphase| 0.012 rad); 306 nm differs by 0.020 in |t| and 0.089
+  rad — the locally periodic library is least reliable next to a resonance, which is what the
+  guard/robust selection avoids.
+* Cost: estimated maximum 0.175 + 0.075 FlexCredit.
+* Examples 17/18 switch the console to UTF-8 (Tidy3D's progress arrows crashed a redirected
+  cp1252 console after the batch had finished); example 18 gained `--load` (analyse a finished
+  batch from disk), `--sizes`, `--run-time`, `--offset`, `--tag`.
+
 ### Recipes — unit-cell search (roadmap U1, U2)
 
 * `rcwa.recipe` and the `recipe_search` generator: height × period scan for a material and
