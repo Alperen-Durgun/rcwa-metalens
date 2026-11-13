@@ -9,9 +9,9 @@
   "NA": 0.4472135954999579
  },
  "fdtd": {
-  "z_focus": 5.005760536146643,
-  "fwhm": 0.6369555885729417,
-  "eff_relative": 0.9059918389538213,
+  "z_focus": 5.060166632391777,
+  "fwhm": 0.6310138962029641,
+  "eff_relative": 0.9054648129430889,
   "xy_plane_z": 5.279817455112881
  },
  "D": 6.0,
@@ -20,110 +20,110 @@
  "H": 0.6,
  "n_sub": 1.4570121246412515,
  "material": "TiO2_Siefke",
- "steps": 15,
+ "steps": 25,
  "run_time": 3e-13,
- "estimated_cost_fc": NaN,
+ "estimated_cost_fc": 1.7901815918063468,
  "aperture": "PEC film, hole radius D/2 + L/2",
  "tidy3d_version": "2.12.2",
- "final_decay": 6.12e-06,
+ "final_decay": 8.55e-06,
  "diagnostic": {
-  "z_focus_fdtd_nearfield_propagated": 4.801453621045218,
+  "z_focus_fdtd_nearfield_propagated": 4.798475293028462,
   "time_sign": 1,
-  "cell_phase_rms_rad": 0.19136387529811433,
+  "cell_phase_rms_rad": 0.18614230334218257,
   "cell_profile": [
    {
     "r_um": [
      0.0,
      0.675
     ],
-    "rms_phase_err_rad": 0.16305662663363454,
-    "mean_amp_ratio": 2.718553088626305
+    "rms_phase_err_rad": 0.1690401758340109,
+    "mean_amp_ratio": 2.805508444689075
    },
    {
     "r_um": [
      0.675,
      1.35
     ],
-    "rms_phase_err_rad": 0.13065858596940158,
-    "mean_amp_ratio": 2.4782231723296206
+    "rms_phase_err_rad": 0.12652571022497708,
+    "mean_amp_ratio": 2.561720997303422
    },
    {
     "r_um": [
      1.35,
      2.0250000000000004
     ],
-    "rms_phase_err_rad": 0.12666972221067868,
-    "mean_amp_ratio": 2.3224823787578943
+    "rms_phase_err_rad": 0.121391554177288,
+    "mean_amp_ratio": 2.3862961375747034
    },
    {
     "r_um": [
      2.0250000000000004,
      2.7
     ],
-    "rms_phase_err_rad": 0.13658161963873328,
-    "mean_amp_ratio": 2.515441209514546
+    "rms_phase_err_rad": 0.13439915013711665,
+    "mean_amp_ratio": 2.5956954912526418
    },
    {
     "r_um": [
      2.7,
      3.375
     ],
-    "rms_phase_err_rad": 0.3243143177133088,
-    "mean_amp_ratio": 1.8028937059748282
+    "rms_phase_err_rad": 0.3137250503903792,
+    "mean_amp_ratio": 1.8591605346259874
    }
   ],
-  "cross_pol_ratio": 0.03170986473560333,
-  "z_focus_lpa_of_fdtd_cells": 5.199048665863669,
-  "z_focus_fdtd_nearfield_cells_only": 4.792646129377778,
-  "rim_power_fraction": 0.048009276564557675,
-  "z_focus_lpa_of_fdtd_cells_lowpass": 5.2381028459781165,
+  "cross_pol_ratio": 0.03184500336647034,
+  "z_focus_lpa_of_fdtd_cells": 5.198133670632396,
+  "z_focus_fdtd_nearfield_cells_only": 4.7898316131631615,
+  "rim_power_fraction": 0.048201220119573236,
+  "z_focus_lpa_of_fdtd_cells_lowpass": 5.237568816853247,
   "cell_profile_lowpass": [
    {
     "r_um": [
      0.0,
      0.675
     ],
-    "mean_phase_err_rad": 0.12043416709347804,
-    "rms_phase_err_rad": 0.12077855255918027,
-    "rel_amp": 1.146819744814101
+    "mean_phase_err_rad": 0.1250948952048159,
+    "rms_phase_err_rad": 0.12620873544606348,
+    "rel_amp": 1.1473834197250201
    },
    {
     "r_um": [
      0.675,
      1.35
     ],
-    "mean_phase_err_rad": -0.04877416087061054,
-    "rms_phase_err_rad": 0.12961929975393244,
-    "rel_amp": 1.0418301164245687
+    "mean_phase_err_rad": -0.038393158241678625,
+    "rms_phase_err_rad": 0.12271792660906068,
+    "rel_amp": 1.0429727521712846
    },
    {
     "r_um": [
      1.35,
      2.0250000000000004
     ],
-    "mean_phase_err_rad": 0.021256020703798964,
-    "rms_phase_err_rad": 0.1590486001377109,
-    "rel_amp": 0.9546523470384364
+    "mean_phase_err_rad": 0.01957112160492402,
+    "rms_phase_err_rad": 0.15340050177618808,
+    "rel_amp": 0.9502464200080191
    },
    {
     "r_um": [
      2.0250000000000004,
      2.7
     ],
-    "mean_phase_err_rad": 0.06968047096302493,
-    "rms_phase_err_rad": 0.12706906433954454,
-    "rel_amp": 1.0547976416899612
+    "mean_phase_err_rad": 0.06399247124893857,
+    "rms_phase_err_rad": 0.12451135943398108,
+    "rel_amp": 1.0549768761496308
    },
    {
     "r_um": [
      2.7,
      3.375
     ],
-    "mean_phase_err_rad": -0.2317233182295949,
-    "rms_phase_err_rad": 0.2685194167040484,
-    "rel_amp": 0.8045651032307576
+    "mean_phase_err_rad": -0.22639121350184224,
+    "rms_phase_err_rad": 0.2618714661359058,
+    "rel_amp": 0.8043987513163853
    }
   ],
-  "cell_phase_rms_lowpass_rad": 0.17300214272996156
+  "cell_phase_rms_lowpass_rad": 0.16847814915769133
  }
 }

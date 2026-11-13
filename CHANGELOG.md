@@ -17,7 +17,11 @@
   comes from field content inside the cells that one value per cell does not carry - unresolved, and a
   band-limited reconstruction of the cell values moves the focus the wrong way. For D 6 the same
   near-field check is off by 4 % (4.801 vs 5.006 um), so its diagnostic numbers are not reliable.
-  Until resolved, LPA focal lengths carry a ~-7 % uncertainty. Cost (estimates) 2 x 0.258 + 0.896 FC.
+  FDTD grid convergence (D 6, 15 -> 25 steps per wavelength, ~1.8 FC estimate): focus 5.006 -> 5.060 um
+  (gap -5.2 -> -4.2 %), FWHM +2.8 -> +1.8 %, eff_rel 0.906 -> 0.905; a second-order extrapolation
+  gives ~5.09 um (gap ~-3.6 %). About 1 point of the gap is FDTD grid error; ~3.5-4 % is the LPA
+  aperture model. The low-passed per-cell field is unchanged with the grid (5.238 um).
+  Until resolved, LPA focal lengths carry a ~-4 % uncertainty (real lens focuses shorter). Cost (estimates) 2 x 0.258 + 0.896 FC.
 
 ### Changed defaults — the lens generators use the validated recipe
 
