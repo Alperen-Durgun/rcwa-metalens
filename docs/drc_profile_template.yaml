@@ -1,0 +1,8 @@
+# DRC profile template - fill in YOUR process's rules (foundry PDK or cleanroom recipe).
+# Use: rcwa.exporting.drc_check(placements, profile="path/to/this.yaml", height=H_um)
+# Nothing here is a real rule set: the values are placeholders and must be replaced.
+name: my-process
+min_feature_um: null      # smallest pillar width the process resolves reliably
+min_gap_um: null          # smallest trench between pillars that still etches/fills completely
+max_aspect: null          # largest height / min(width, gap) the etch or ALD fill supports
+notes: "process, tool, date, who measured it"

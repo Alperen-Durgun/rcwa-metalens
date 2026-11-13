@@ -917,6 +917,51 @@ def test_fabrication_geometry_residual_and_sidewall():
     fill = [float(np.mean(np.abs(e) > 1.5)) for e, _ in lay]
     assert len(lay) == 5 and all(a > b for a, b in zip(fill, fill[1:]))     # bottom slice widest
 
+
+def test_measured_film_models():
+    """M3: Cauchy and Sellmeier fits evaluate their formulas, refuse wavelengths outside the
+    fit range and are labelled user-supplied; the CSV template loads (format check only)."""
+    import os
+    from rcwa import materials as m
+    m.register_cauchy("TEST_cauchy", 2.3, 0.02, 0.001, k=0.002, range_um=(0.45, 0.8))
+    lam = 0.633
+    v = np.sqrt(complex(m.eps_of("TEST_cauchy", lam)))
+    assert abs(v - (2.3 + 0.02 / lam ** 2 + 0.001 / lam ** 4 + 0.002j)) < 1e-12
+    assert m.info("TEST_cauchy")["license"] == "user-supplied"
+    m.register_sellmeier("TEST_sell", [0.6961663, 0.4079426, 0.8974794],
+                         [0.0684043 ** 2, 0.1162414 ** 2, 9.896161 ** 2], range_um=(0.3, 2.0))
+    assert abs(np.sqrt(complex(m.eps_of("TEST_sell", lam))) - m.n_SiO2(lam)) < 1e-12     # Malitson
+    for name in ("TEST_cauchy", "TEST_sell"):
+        try:
+            m.eps_of(name, 2.5)
+            raise AssertionError("must refuse to extrapolate")
+        except ValueError:
+            pass
+    tpl = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "material_template.csv")
+    m.register_measured_csv("TEST_template", tpl)
+    assert m.info("TEST_template")["range_um"] == (0.45, 0.75)
+
+
+def test_drc_profiles_and_aspect_ratio():
+    """F1: aspect ratio = H / min(width, gap) is checked against the profile; the empty template
+    is refused instead of guessed; a built-in profile replaces the defaults."""
+    import os
+    from rcwa import exporting as X
+    L = 0.35
+    pl = [{"x": i * L, "y": j * L, "params": 0.25 if (i, j) == (1, 1) else 0.10}
+          for i in range(3) for j in range(3)]                         # one fat pillar: gap 0.175 - ...
+    r = X.drc_check(pl, profile="recipe_search_default", height=0.6)
+    # widths 0.10 -> AR 6; fat pillar gap to its neighbours = 0.35 - (0.25 + 0.10)/2 = 0.175 -> AR 3.4
+    assert r["ok"] and abs(r["worst_aspect"] - 6.0) < 1e-9 and r["profile"]["max_aspect"] == 15.0
+    r2 = X.drc_check(pl, profile="recipe_search_default", height=0.9, max_aspect=8)
+    assert not r2["ok"] and r2["n_aspect_viol"] == 8 and r2["violations"][0]["type"] == "aspect"
+    tpl = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "drc_profile_template.yaml")
+    try:
+        X.drc_check(pl, profile=tpl)
+        raise AssertionError("an unfilled template must be refused")
+    except ValueError:
+        pass
+
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio
     utf8_stdio()

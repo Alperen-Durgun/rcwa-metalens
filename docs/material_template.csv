@@ -1,0 +1,11 @@
+# Measured optical constants of YOUR film - template (rcwa.materials.register_measured_csv)
+# One row per wavelength: wavelength in micrometres, n, k (k >= 0 is absorption).
+# Record the deposition process, film thickness, substrate and the ellipsometry model here,
+# e.g. "ALD TiO2, 90 C, 600 nm on fused silica, Tauc-Lorentz fit, measured 2026-11-20".
+# The table is used only inside its wavelength range (no extrapolation).
+# The four rows below are EXAMPLE NUMBERS TO SHOW THE FORMAT, NOT DATA. Replace them.
+wavelength_um,n,k
+0.450,2.500,0.0005
+0.550,2.430,0.0002
+0.633,2.400,0.0000
+0.750,2.370,0.0000

@@ -340,7 +340,7 @@ def info(name):  # noqa: F811
         return {"name": name, "kind": r["kind"], "range_um": r["range_um"], "points": None,
                 "note": f"{r['notes']} — {r['references'][:160]}", "approximate": False,
                 "references": r["references"], "source_file": r["file"],
-                "license": "refractiveindex.info database, CC0 1.0 (public domain)"}
+                "license": r.get("license", "refractiveindex.info database, CC0 1.0 (public domain)")}
     return _info_base(name)
 
 
@@ -354,3 +354,36 @@ def index_spread(names, lam):
     re_ = [v.real for v in out.values()]
     out["spread"] = float(max(re_) - min(re_)) if re_ else 0.0
     return out
+
+
+# --- measured film data (roadmap M3): ellipsometry models with a validity range ---
+def _register_model(name, fn, lo, hi, note):
+    def model(lam, fn=fn, lo=lo, hi=hi):
+        la = np.asarray(lam, float)
+        if np.any(la < lo - 1e-9) or np.any(la > hi + 1e-9):
+            raise ValueError(f"material '{name}': wavelength {float(np.min(la)):.4g}-{float(np.max(la)):.4g} um is "
+                             f"outside the fitted range {lo:.4g}-{hi:.4g} um (no extrapolation)")
+        return fn(la)
+    MATERIALS[name] = model
+    _SOURCES[name] = {"fn": model, "range_um": (float(lo), float(hi)), "kind": "model",
+                      "file": "", "references": note, "notes": note, "license": "user-supplied"}
+    _NOTES[name] = note
+
+
+def register_cauchy(name, A, B=0.0, C=0.0, k=0.0, range_um=(0.4, 1.0), note="user Cauchy fit"):
+    """Register an ellipsometry Cauchy fit n(lam) = A + B/lam^2 + C/lam^4 (lam in um, B in um^2,
+    C in um^4) with a constant extinction k, valid only inside range_um (the fit's range)."""
+    _register_model(name, lambda la: A + B / la ** 2 + C / la ** 4 + 1j * k, *range_um,
+                    note=f"{note}: Cauchy A={A}, B={B}, C={C}, k={k}")
+
+
+def register_sellmeier(name, B, C, range_um=(0.4, 1.0), note="user Sellmeier fit"):
+    """Register n^2 = 1 + sum B_i lam^2 / (lam^2 - C_i) (C_i in um^2), lossless, range-checked."""
+    _register_model(name, lambda la: np.sqrt(1 + sum(b * la ** 2 / (la ** 2 - c) for b, c in zip(B, C))) + 0j,
+                    *range_um, note=f"{note}: Sellmeier B={list(B)}, C={list(C)}")
+
+
+def register_measured_csv(name, path, note=None):
+    """Register a measured n,k table (CSV 'wavelength_um,n,k', '#' comments; see
+    docs/material_template.csv). Range-checked like every table."""
+    register_table(name, *load_nk_csv(path), note=note or f"measured: {_os.path.basename(path)}")

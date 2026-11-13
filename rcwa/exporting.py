@@ -42,25 +42,63 @@ def far_field(E0, dx, lam):
     return I / I.max(), theta, theta
 
 
-def drc_check(placements, min_feature=0.05, min_gap=0.04, shape_key="params", max_report=50):
+DRC_PROFILES = {
+    # Built-in profiles are this package's own defaults, NOT foundry rules. Put your process's
+    # numbers in a YAML file (docs/drc_profile_template.yaml) and pass its path as `profile`.
+    "rcwa_default": {"min_feature_um": 0.05, "min_gap_um": 0.04, "max_aspect": None,
+                     "notes": "historic defaults of drc_check"},
+    "recipe_search_default": {"min_feature_um": 0.06, "min_gap_um": 0.06, "max_aspect": 15.0,
+                              "notes": "limits used by recipe_search / docs/recipes"},
+}
+
+
+def load_drc_profile(profile):
+    """A DRC profile by built-in name or YAML path -> dict(min_feature_um, min_gap_um,
+    max_aspect, notes). Missing keys are refused rather than guessed."""
+    if isinstance(profile, dict):
+        prof = dict(profile)
+    elif profile in DRC_PROFILES:
+        prof = dict(DRC_PROFILES[profile])
+    else:
+        import yaml
+        with open(profile, encoding="utf-8") as f:
+            prof = yaml.safe_load(f) or {}
+    missing = [k for k in ("min_feature_um", "min_gap_um") if prof.get(k) is None]
+    if missing:
+        raise ValueError(f"DRC profile {profile!r} lacks {missing}")
+    prof.setdefault("max_aspect", None); prof.setdefault("notes", "")
+    return prof
+
+
+def drc_check(placements, min_feature=0.05, min_gap=0.04, shape_key="params", max_report=50,
+              profile=None, height=None, max_aspect=None):
     """Simple design-rule check (DRC) — scales to millions of pillars (k-d tree):
       - min feature: every pillar size >= min_feature (um)
       - min gap: smallest edge-to-edge spacing to the 8 nearest neighbours >= min_gap (um)
-    The gap uses the first size parameter as the pillar extent (exact for circles and for
-    axis-aligned squares on a square lattice; conservative for other shapes).
-    Returns: {ok, n, n_feature_viol, n_gap_viol, worst_gap, min_size, violations[list]}."""
+      - aspect ratio (if height and max_aspect are given): height / min(pillar size, its
+        smallest gap) <= max_aspect — both the pillar and the trench next to it must be etched
+    profile: a built-in name (DRC_PROFILES) or a YAML path; its values replace min_feature,
+    min_gap and max_aspect. The gap uses the first size parameter as the pillar extent (exact for
+    circles and for axis-aligned squares on a square lattice; conservative for other shapes).
+    Returns: {ok, n, n_feature_viol, n_gap_viol, n_aspect_viol, worst_gap, min_size,
+    worst_aspect, profile, violations[list]}."""
     from scipy.spatial import cKDTree
+    prof = None
+    if profile is not None:
+        prof = load_drc_profile(profile)
+        min_feature, min_gap = prof["min_feature_um"], prof["min_gap_um"]
+        max_aspect = prof["max_aspect"] if max_aspect is None else max_aspect
     n = len(placements)
     if n == 0:
-        return {"ok": True, "n": 0, "n_feature_viol": 0, "n_gap_viol": 0, "worst_gap": -1.0,
-                "min_size": 0.0, "violations": []}
+        return {"ok": True, "n": 0, "n_feature_viol": 0, "n_gap_viol": 0, "n_aspect_viol": 0,
+                "worst_gap": -1.0, "min_size": 0.0, "worst_aspect": 0.0, "profile": prof, "violations": []}
     xy = np.array([[p["x"], p["y"]] for p in placements], float)
     sizes = np.array([float(np.atleast_1d(p[shape_key])[0]) for p in placements])
     viol = []
     fv = np.where(sizes < min_feature)[0]
     for i in fv[:max_report]:
         viol.append({"type": "min_feature", "i": int(i), "value": float(sizes[i])})
-    worst = np.inf; gv = np.zeros(0, int)
+    worst = np.inf; gv = np.zeros(0, int); gap = np.full(n, np.inf)
     if n > 1:
         kq = min(n, 9)                                    # self + the 8 lattice neighbours
         dist, j = cKDTree(xy).query(xy, k=kq)
@@ -69,8 +107,17 @@ def drc_check(placements, min_feature=0.05, min_gap=0.04, shape_key="params", ma
         worst = float(gap.min()); gv = np.where(gap < min_gap)[0]
         for i in gv[:max(0, max_report - len(viol))]:
             viol.append({"type": "min_gap", "i": int(i), "j": int(jn[i]), "gap": round(float(gap[i]), 4)})
-    return {"ok": len(fv) == 0 and len(gv) == 0, "n": n, "n_feature_viol": int(len(fv)),
-            "n_gap_viol": int(len(gv)), "worst_gap": float(worst if np.isfinite(worst) else -1),
-            "min_size": float(sizes.min()), "violations": viol}
+    av = np.zeros(0, int); worst_ar = 0.0
+    if height is not None:
+        ar = float(height) / np.maximum(np.minimum(sizes, np.where(np.isfinite(gap), gap, np.inf)), 1e-12)
+        worst_ar = float(ar.max())
+        if max_aspect is not None:
+            av = np.where(ar > max_aspect * (1 + 1e-9))[0]
+            for i in av[:max(0, max_report - len(viol))]:
+                viol.append({"type": "aspect", "i": int(i), "value": round(float(ar[i]), 2)})
+    return {"ok": len(fv) == 0 and len(gv) == 0 and len(av) == 0, "n": n,
+            "n_feature_viol": int(len(fv)), "n_gap_viol": int(len(gv)), "n_aspect_viol": int(len(av)),
+            "worst_gap": float(worst if np.isfinite(worst) else -1), "min_size": float(sizes.min()),
+            "worst_aspect": worst_ar, "profile": prof, "violations": viol}
 
 

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Your own process data — measured films and DRC profiles (roadmap M3, F1)
+
+* `materials.register_cauchy`, `register_sellmeier` (ellipsometry fits, range-checked, labelled
+  user-supplied) and `register_measured_csv` with a format template `docs/material_template.csv`
+  (its numbers are marked as format examples, not data). Check: the Sellmeier form reproduces
+  Malitson's fused silica to 1e-12. Tauc–Lorentz is not included (no reference implementation
+  to verify it against yet).
+* `exporting.drc_check(..., profile=, height=, max_aspect=)`: aspect ratio H / min(width, gap)
+  per pillar; profiles by name (`DRC_PROFILES`: this package's own defaults, explicitly not
+  foundry rules) or from a YAML file (`docs/drc_profile_template.yaml`, all values null — an
+  unfilled profile is refused rather than guessed).
+
 ### Fabrication geometry — tapered sidewalls and residual film (roadmap P5, M4)
 
 * `meta_atom_library(..., sidewall_deg=, n_steps=, residual=(material, thickness))`, also in
