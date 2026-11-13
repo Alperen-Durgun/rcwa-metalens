@@ -708,6 +708,27 @@ def test_refine_library_finds_resonance():
     assert 0.219 < r["center"] < 0.223 and r["t_min"] < 0.3 and r["width"] < 0.004
     assert np.all(np.diff(ref["sizes"]) > 0) and set(np.round(s, 9)) <= set(np.round(ref["sizes"], 9))
 
+
+def test_lens_tolerance_consistency():
+    """B4: zero error reproduces analyze_focus exactly (interpolation is exact at library
+    nodes). Physics check: on a unit-amplitude library whose phase is linear in size, a uniform
+    bias is only a global phase, so the focus must not change; random error does change it and
+    is reproducible with the same seed."""
+    from rcwa import design as dz
+    lib = _synthetic_resonant_library()
+    lib["resonances"] = dz.find_resonances(lib["sizes"], lib["t"])
+    d = dz.design_lens(0.633, 0.35, 0.60, 4.0, 6.0, lib=lib)
+    E0, oor = dz.perturbed_field(d, lib, 0.0)
+    assert np.allclose(E0, d["E0"]) and oor == 0.0
+    a = dz.analyze_focus(d, nz=41)
+    r = dz.lens_tolerance(d, lib, bias_nm=(0, 30), sigma_nm=0)
+    assert r["n_trial"] == 1 and abs(r["eff"][0, 0] - a["eff_absolute"]) < 1e-12
+    assert abs(r["strehl"][0, 0] - a["strehl"]) < 1e-12 and abs(r["eff"][1, 0] - r["eff"][0, 0]) < 1e-9
+    r1 = dz.lens_tolerance(d, lib, bias_nm=(0,), sigma_nm=20, n_trial=3, seed=5)
+    r2 = dz.lens_tolerance(d, lib, bias_nm=(0,), sigma_nm=20, n_trial=3, seed=5)
+    assert np.array_equal(r1["eff"], r2["eff"]) and r1["eff_stats"]["std"][0] > 0
+
+
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio
     utf8_stdio()

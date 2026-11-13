@@ -927,6 +927,71 @@ def run_index_robustness(fm, slug):
     return figpath, body, f"n-robustness: ±{dn_max:.2f}Δn -> efficiency {effs[0]:.0f}…{effs[-1]:.0f}%, sensitivity {sens:.0f}p/Δn"
 
 
+def run_lens_tolerance(fm, slug):
+    """LENS fabrication tolerance: uniform size bias + random per-pillar error (Monte Carlo) ->
+    Strehl / absolute-efficiency distribution, default vs robust atom selection side by side.
+    The size response comes from an adaptively refined library (resonances resolved)."""
+    lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.35); H = num(fm, "height", 0.60)
+    mat = fm.get("material", "TiO2_t"); shape = fm.get("shape", "circle")
+    D_lens = num(fm, "D_lens", 16.0); f = num(fm, "f", 20.0); M = int(num(fm, "M", 7, int))
+    n_sub = num(fm, "n_sub", 1.0); n_pillar = num(fm, "n_pillar", 2.4)
+    bmax = num(fm, "bias_max_nm", 6.0); nb = int(num(fm, "n_bias", 7, int))
+    sigma = num(fm, "sigma_nm", 2.0); ntr = int(num(fm, "n_trial", 10, int))
+    rsig = num(fm, "robust_sigma_nm", 3.0); guard = num(fm, "guard_nm", -1.0)
+    rmax = int(num(fm, "refine_max_solves", 80, int)); seed = int(num(fm, "seed", 0, int))
+    import warnings
+    base = dz.meta_atom_library(lam0, L, H, shape=shape, material=mat, n_pillar=n_pillar, M=M, n_sub=n_sub)
+    ref = dz.refine_library(base, max_solves=rmax)
+    kw = dict(shape=shape, material=mat, n_pillar=n_pillar, M=M, n_sub=n_sub)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        designs = {"default": dz.design_lens(lam0, L, H, D_lens, f, lib=base, **kw),
+                   f"robust σ={rsig:g}nm": dz.design_lens(lam0, L, H, D_lens, f, lib=ref, mode="robust",
+                                                         sigma_nm=rsig, guard_nm=guard if guard >= 0 else None, **kw)}
+    biases = np.linspace(-bmax, bmax, nb)
+    tol = {k: dz.lens_tolerance(d, ref, bias_nm=biases, sigma_nm=sigma, n_trial=ntr, seed=seed)
+           for k, d in designs.items()}
+    fig, ax = plt.subplots(1, 2, figsize=(12, 4.3))
+    for c, (k, r) in enumerate(tol.items()):
+        for a_, key in ((ax[0], "eff_stats"), (ax[1], "strehl_stats")):
+            m, sd = r[key]["mean"], r[key]["std"]
+            a_.plot(biases, m, "o-", color=f"C{c}", label=k)
+            a_.fill_between(biases, m - sd, m + sd, color=f"C{c}", alpha=.2)
+    for a_, yl in ((ax[0], "absolute efficiency"), (ax[1], "Strehl")):
+        a_.set_xlabel("uniform size bias (nm)"); a_.set_ylabel(yl); a_.grid(alpha=.3); a_.legend()
+        a_.axvline(0, color="gray", ls=":")
+    ax[0].set_title(f"Efficiency (mean ± std, random σ={sigma:g}nm, {tol['default']['n_trial']} trials)")
+    ax[1].set_title("Strehl")
+    d0 = designs["default"]
+    fig.suptitle(f"LENS TOLERANCE — {mat}/{shape}, D={d0['D_lens']:.0f}um f={f}um NA={d0['NA']:.2f}")
+    figpath = _out(slug + ".png"); fig.tight_layout(); fig.savefig(figpath, dpi=130); plt.close(fig)
+    i0 = int(np.argmin(np.abs(biases)))
+    rows = "".join(f"| {b:+.1f} | " + " | ".join(
+        f"{r['eff_stats']['mean'][i]:.3f} ± {r['eff_stats']['std'][i]:.3f} / {r['strehl_stats']['mean'][i]:.3f}"
+        for r in tol.values()) + " |\n" for i, b in enumerate(biases))
+    drop = {k: float(r["eff_stats"]["mean"][i0] - r["eff_stats"]["mean"].min()) for k, r in tol.items()}
+    res = ", ".join(f"{x['center']*1000:.1f} nm (|t|={x['t_min']:.2f}, width {x['width']*1000:.1f} nm)"
+                    for x in ref["resonances"]) or "none found"
+    oor = max(r["out_of_range"] for r in tol.values())
+    names = list(tol)
+    nom = {k: dz.analyze_focus(d) for k, d in designs.items()}
+    nomtxt = " · ".join(f"{k}: eff {a['eff_absolute']:.3f}, Strehl {a['strehl']:.3f}" for k, a in nom.items())
+    body = (f"- **Library:** {len(base['sizes'])} sizes refined to {len(ref['sizes'])} "
+            f"({ref['n_refine_solves']} extra solves{'' if ref['refine_converged'] else ', budget exhausted'}) · "
+            f"**resonances:** {res}\n"
+            f"- **Error model:** size = nominal + bias + N(0, ({sigma:g} nm)²) per pillar; t(s) interpolated "
+            f"on the refined library (no re-solve). Pillars pushed outside the library range: up to "
+            f"{oor*100:.1f}% (clamped to the end sizes).\n"
+            f"- **Error-free:** {nomtxt}\n\n"
+            f"| bias (nm) | {names[0]}: eff ± std / Strehl | {names[1]}: eff ± std / Strehl |\n|---|---|---|\n"
+            + rows +
+            f"\n- **Largest mean-efficiency drop over ±{bmax:g} nm:** "
+            + " · ".join(f"{k}: {v*100:.1f} points" for k, v in drop.items()) + "\n"
+            "- Locally-periodic approximation; near-resonance atoms are where it is least reliable. "
+            "Final verification is FDTD.")
+    return figpath, body, ("tolerance ±%gnm: " % bmax) + ", ".join(f"{k} drop {v*100:.1f}pt" for k, v in drop.items())
+
+
 def run_metalens_large_tiled(fm, slug):
     """cm-scale TILED large lens. Vectorized size selection (loop-free) +
     tile-by-tile GDS (bounded memory) + preview + cm-scale projection."""
@@ -971,6 +1036,7 @@ RUNNERS = {"grating": run_grating, "metalens_library": run_metalens_library,
            "achromatic_analysis": run_achromatic_analysis, "vortex_beam": run_vortex_beam,
            "hologram": run_hologram, "polarization_multiplexed": run_polarization_multiplexed,
            "metalens_design_full": run_metalens_design_full, "tolerance_analysis": run_tolerance_analysis,
+           "lens_tolerance": run_lens_tolerance,
            "fov_analysis": run_fov_analysis, "index_robustness": run_index_robustness,
            "metalens_large_tiled": run_metalens_large_tiled,
            "achromatic_design": run_achromatic_design}

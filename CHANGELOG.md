@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Validation — unit cell against FDTD (roadmap V1)
+
+* New `examples/17_unitcell_validation.py`: zeroth-order t from the cell-averaged field over
+  an air reference, both sides in the physics convention (no sign guessing), six sizes plus a
+  finer-grid FDTD check, cost estimate before any run, JSON record in `validation/`.
+* Result (Tidy3D 2.12.2, record `validation/V1_unitcell_2026-11-13.json`): passed. Five
+  off-resonance sizes agree within 0.0034 in |t| and 0.034 rad in phase (limits 0.02 and 0.1);
+  FDTD grid refinement changes the result by 0.0007 / 0.011 rad. Estimated maximum cost of the
+  9-task batch: 0.225 FlexCredit.
+
+### Added — lens tolerance analysis (roadmap B4)
+
+* `design.lens_tolerance` and `design.perturbed_field`: Strehl / absolute-efficiency
+  distribution of a lens under a uniform size bias plus a random per-pillar error N(0, σ²).
+  The size response is interpolated on a refined library (no extra solves). Against re-solved
+  RCWA for uniform bias (same lens as below, ±8 nm, three selection rules, 18 cases) the
+  interpolated efficiency agreed within 0.7 points, slightly pessimistic; one Strehl value
+  differed by 0.017.
+* New generator `lens_tolerance` (24th): default vs robust selection side by side. The existing
+  `tolerance_analysis` (1D deflector) is unchanged.
+* Measured with the generator defaults (D = 16 µm, f = 20 µm, σ = 2 nm random, 10 trials, bias
+  −6…+6 nm): mean efficiency 0.749–0.798 (default selection) vs 0.797–0.821 (robust, σ_design =
+  3 nm); Strehl 0.880–0.932 vs 0.944–0.958. Error-free values: 0.816 / 0.963 and 0.831 / 0.987.
+
 ### Added — resonance-aware, tolerance-robust atom selection (roadmap B1–B3)
 
 * `design.refine_library`: adaptive refinement of a meta-atom library. Each interval is checked

@@ -25,6 +25,8 @@ FAST = {
     "vortex_beam": {}, "hologram": {"iters": 5}, "polarization_multiplexed": {},
     "metalens_design_full": {"D_lens": 4.0, "f": 6.0, "M": 4},
     "tolerance_analysis": {"n_trial": 4, "n_seg": 6},
+    "lens_tolerance": {"D_lens": 4.0, "f": 6.0, "M": 3, "n_bias": 3, "n_trial": 2,
+                       "refine_max_solves": 10},
     "fov_analysis": {"D_lens": 4.0, "f": 6.0, "n_angle": 3, "angle_max": 10, "M": 4},
     "index_robustness": {"D_lens": 4.0, "f": 6.0, "M": 4, "n_dn": 3, "dn_max": 0.1},
     "metalens_large_tiled": {"D_lens": 15.0, "f": 20.0, "M": 4, "tile_cells": 30},

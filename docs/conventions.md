@@ -71,6 +71,10 @@ look bright. Fabrication errors of a few nm then push atoms onto it.
 * `guard_nm` excludes atoms within that distance of a resonance band. `mode="robust"` with
   `sigma_nm` minimizes the expected error over N(0, σ²) size errors instead. It needs a refined
   library, because the size response is interpolated between samples.
+* `lens_tolerance(design, lib, bias_nm, sigma_nm, n_trial)` evaluates a lens with every pillar
+  at `s + bias + N(0, σ²)`, using the same interpolation. Measured against re-solved RCWA for
+  uniform bias: efficiency within 0.7 points (slightly pessimistic). Sizes pushed beyond the
+  library range are clamped to the end sizes; the fraction is reported (`out_of_range`).
 
 
 `design.analyze_focus` propagates the cell-sampled aperture field with the angular-spectrum

@@ -25,7 +25,7 @@ meta-atom library ──► lens phase ──► atom selection ──► focal 
 | **Metrics** | FWHM, absolute/relative focusing efficiency, Strehl (same-plane reference), MTF, encircled energy, sidelobe level, depth of focus, group delay |
 | **Fabrication** | Pure-Python GDS-II writer (works with non-ASCII Windows paths), hierarchical output (~36 bytes per pillar), tiled cm-scale lenses, design-rule check |
 | **Verification** | Bridges to Meep (local FDTD) and Tidy3D (cloud FDTD); grcwa cross-checks |
-| **Automation** | 23 experiment generators behind one command line; optional Markdown-note workflow (Obsidian friendly) |
+| **Automation** | 24 experiment generators behind one command line; optional Markdown-note workflow (Obsidian friendly) |
 
 ## Install
 
@@ -49,7 +49,7 @@ On Windows, `setup_env.bat` creates the environment, `run_tests.bat` runs the te
 ### Command line
 
 ```bash
-rcwa-metalens list                                   # the 23 experiment types
+rcwa-metalens list                                   # the 24 experiment types
 rcwa-metalens help metalens_design_full              # its parameters and defaults
 rcwa-metalens metalens_design_full D_lens=16 f=20 material=TiO2_t lam0=0.633
 ```
@@ -71,6 +71,12 @@ print(f"focus {a['z_focus']:.2f} um, FWHM {a['fwhm']*1000:.0f} nm, "
       f"Strehl {a['strehl']:.2f}, efficiency {a['eff_absolute']:.0%}")
 
 gds.layout_to_gds(d["placements"], "lens.gds")       # fabrication mask
+
+# resonance-aware, tolerance-robust selection (see docs/conventions.md)
+lib = design.refine_library(d["lib"])                 # finds narrow resonances, lib["resonances"]
+dr = design.design_lens(lam0=0.633, L=0.35, H=0.60, D_lens=16, f=20, material="TiO2_t",
+                        lib=lib, mode="robust", sigma_nm=3)
+tol = design.lens_tolerance(dr, lib, bias_nm=(-4, 0, 4), sigma_nm=2)
 ```
 
 ### Python — the solver itself
@@ -101,7 +107,7 @@ Details, definitions of every metric and accuracy guidance: [docs/conventions.md
 ## Validation
 
 ```bash
-pytest                              # 48 unit tests + 30 end-to-end tests
+pytest                              # 52 unit tests + 31 end-to-end tests
 python verify_all.py                # human-readable pass/fail table of everything
 ```
 
@@ -116,11 +122,26 @@ What the tests establish:
 * GDS — files are read back with gdstk; hierarchical and flat output describe identical geometry;
 * every experiment generator, the command line and the note workflow run end to end.
 
-**FDTD status.** Earlier versions of this code were compared with Tidy3D and Meep (unit-cell
-transmission and focusing of small 3D lenses). Since then the 2D solver switched to Li's
-factorization and a finer geometry raster, which changes library phases by a few hundredths of
-a radian; the FDTD comparison has not been repeated for this version. The scripts to do so are
-`examples/14_unitcell_fdtd_vs_rcwa.py`, `15_unitcell_phase.py` and `16_lens_focus_fdtd.py`.
+**FDTD — unit cell (V1, passed).** The meta-atom library was compared with Tidy3D FDTD
+(`examples/17_unitcell_validation.py`, record `validation/V1_unitcell_2026-11-13.json`):
+TiO₂ circle, λ = 633 nm, Λ = 350 nm, H = 600 nm, normal incidence, RCWA M = 9, FDTD 20 steps
+per wavelength, zeroth-order t from the cell-averaged field over an air reference. Both sides in
+the physics convention; one constant reference-plane phase is fitted and removed.
+
+| Pillar diameter | \|t\| RCWA | \|t\| FDTD | Δ\|t\| | Δphase (rad) |
+|---|---|---|---|---|
+| 100 nm | 0.9998 | 1.0000 | −0.0002 | +0.028 |
+| 150 nm | 0.9865 | 0.9848 | +0.0017 | +0.009 |
+| 190 nm | 0.9934 | 0.9962 | −0.0028 | −0.013 |
+| 250 nm | 0.9339 | 0.9331 | +0.0008 | +0.012 |
+| 290 nm | 0.9949 | 0.9983 | −0.0034 | −0.034 |
+| 215 nm (6 nm from the 221 nm resonance; not judged) | 0.9140 | 0.9021 | +0.0119 | +0.003 |
+
+Acceptance was |Δ|t|| < 0.02 and |Δphase| < 0.1 rad; the largest deviations are 0.0034 and
+0.034 rad. Refining the FDTD grid (20 → 30 steps per wavelength) moved the 250 nm result by
+0.0007 in |t| and 0.011 rad, the same order as the RCWA–FDTD differences. Scope: one material,
+one wavelength, normal incidence, no substrate. **Not yet repeated for this version:** focusing
+of a small 3D lens (V2, `examples/16_lens_focus_fdtd.py`).
 
 ## Limits — read before sending a mask to a foundry
 
@@ -135,6 +156,9 @@ a radian; the FDTD comparison has not been repeated for this version. The script
 * Substrates (`n_sub`) are supported by the RCWA library and passed to the FDTD bridges, but
   the FDTD bridges with a substrate have not been run against a real FDTD install yet.
 * GPU back-ends are detected and selected, but have not been exercised on GPU hardware.
+* The default uniform size sweep can **step over narrow resonances** (one sits at ≈ 221 nm in
+  the default 633 nm TiO₂ library). Use `refine_library` and `mode="robust"` for anything you
+  intend to fabricate; `lens_tolerance` reports the size-error sensitivity.
 
 ## Experiment types
 
@@ -142,7 +166,8 @@ a radian; the FDTD comparison has not been repeated for this version. The script
 `lens_fullwave_1d`, `metalens_layout_2d`, `wavelength_sweep`, `birefringent_library`,
 `jones_matrix`, `pb_phase_library`, `param_map_2d`, `inverse_design_deflector`,
 `achromatic_analysis`, `achromatic_design`, `vortex_beam`, `hologram`,
-`polarization_multiplexed`, `metalens_design_full`, `tolerance_analysis`, `fov_analysis`,
+`polarization_multiplexed`, `metalens_design_full`, `tolerance_analysis`, `lens_tolerance`,
+`fov_analysis`,
 `index_robustness`, `metalens_large_tiled`.
 
 `rcwa-metalens list` prints a one-line description of each.
@@ -161,7 +186,7 @@ rcwa/                     the package
   gds.py  gdswriter.py  largelens.py  exporting.py            GDS, tiled large lenses, DRC, BSDF
   fullwave.py  pipeline.py                                    Meep / Tidy3D / Zemax bridges
   adjoint.py  hiacc2d.py  backends.py                         adjoint design, grcwa bridge, GPU detection
-  experiments.py  cli.py                                      23 generators + command line
+  experiments.py  cli.py                                      24 generators + command line
 examples/                 19 Python scripts + 1 shell script (validation, libraries, Meep and Tidy3D runs)
 tests/                    test_rcwa.py (unit) · test_experiments.py (end to end)
 docs/conventions.md       conventions, metric definitions, accuracy guidance
