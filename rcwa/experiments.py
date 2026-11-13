@@ -1003,8 +1003,8 @@ def run_recipe_search(fm, slug):
     lam0 = num(fm, "lam0", 0.633); mat = fm.get("material", "TiO2_Siefke"); shape = fm.get("shape", "circle")
     sub = fm.get("substrate", "SiO2_Malitson")
     n_sub = float(np.real(np.sqrt(materials.eps_of(sub, lam0)))) if sub not in ("", "air", "none") else 1.0
-    Hs = np.linspace(num(fm, "H_min", 0.55), num(fm, "H_max", 0.80), int(num(fm, "n_H", 6, int)))
-    Ls = np.linspace(num(fm, "L_min", 0.30), num(fm, "L_max", 0.40), int(num(fm, "n_L", 5, int)))
+    Hs = np.round(np.linspace(num(fm, "H_min", 0.55), num(fm, "H_max", 0.80), int(num(fm, "n_H", 6, int))), 6)
+    Ls = np.round(np.linspace(num(fm, "L_min", 0.30), num(fm, "L_max", 0.40), int(num(fm, "n_L", 5, int))), 6)
     kw = dict(material=mat, shape=shape, n_sub=n_sub, min_feature=num(fm, "min_feature", 0.06),
               min_gap=num(fm, "min_gap", 0.06), max_aspect=num(fm, "max_aspect", 15.0),
               M=int(num(fm, "M", 9, int)), n_sizes=int(num(fm, "n_sizes", 16, int)),
@@ -1029,7 +1029,8 @@ def run_recipe_search(fm, slug):
         ax.plot(best["L"] * 1000, best["H"] * 1000, "*", color="r", ms=14, label="recommended")
         ax.legend(loc="upper left")
     ax.set_xlabel("period L (nm)"); ax.set_ylabel("height H (nm)")
-    ax.set_title(f"Recipe search — {mat}/{shape}, λ={lam0*1000:.0f} nm, substrate n={n_sub:.3f}  (x: phase gap > {max_gap:.2f} rad)")
+    ax.set_title(f"Recipe search — {mat}/{shape}, λ = {lam0*1000:.0f} nm, substrate n = {n_sub:.3f}\n"
+                 f"(x: phase gap > {max_gap:.2f} rad; ★: recommended)", fontsize=10)
     figpath = _out(slug + ".png"); fig.tight_layout(); fig.savefig(figpath, dpi=130); plt.close(fig)
     feas = [r for r in rows if r["feasible"]][:8]
     tab = "".join(f"| {r['H']*1000:.0f} | {r['L']*1000:.0f} | {r['s_min']*1000:.0f}–{r['s_max']*1000:.0f} | {r['aspect']:.1f} | "

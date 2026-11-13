@@ -85,8 +85,9 @@ def meta_atom_library(lam0, L, H, sizes=None, shape="circle", material=None, n_p
         t = np.array(parallel_map(_atom_t, jobs, n_jobs=nj), complex).reshape(len(sizes))
         return {"t_re": t.real, "t_im": t.imag}
 
-    key = {"lam0": float(lam0), "L": float(L), "H": float(H), "shape": shape, "M": int(M),
-           "n": (round(n.real, 5), round(n.imag, 5)), "n_sub": float(n_sub), "n_bg": float(n_bg),
+    key = {"lam0": round(float(lam0), 9), "L": round(float(L), 9), "H": round(float(H), 9),
+           "shape": shape, "M": int(M), "n": (round(n.real, 5), round(n.imag, 5)),
+           "n_sub": float(n_sub), "n_bg": float(n_bg),
            "N": N, "sizes": tuple(np.round(sizes, 6))}
     c = cache.cached_library("atomlib", key, _compute) if use_cache else _compute()
     t = to_physical(c["t_re"] + 1j * c["t_im"])

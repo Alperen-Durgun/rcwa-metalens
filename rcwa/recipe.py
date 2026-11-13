@@ -48,7 +48,7 @@ def evaluate_cell(lam0, H, L, material=None, n_pillar=2.4, shape="circle", min_f
         return {**row, "feasible": False, "reason": "period not sub-wavelength (diffraction)"}
     if row["s_max"] <= row["s_min"]:
         return {**row, "feasible": False, "reason": "no size range between min_feature and L - min_gap"}
-    if row["aspect"] > max_aspect:
+    if row["aspect"] > max_aspect * (1 + 1e-9):                # 0.9 / 0.06 = 15.000000000000002
         return {**row, "feasible": False, "reason": f"aspect ratio {row['aspect']:.1f} > {max_aspect}"}
     sizes = np.linspace(row["s_min"], row["s_max"], int(n_sizes))
     lib = dz.meta_atom_library(lam0, L, H, sizes=sizes, shape=shape, material=material,

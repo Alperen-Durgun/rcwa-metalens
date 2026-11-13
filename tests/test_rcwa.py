@@ -870,6 +870,8 @@ def test_recipe_fom_analytic_and_constraints():
     assert abs(recipe.library_fom(half, sigma_nm=1e-9)[1] - (0.5 + 1 / np.pi) ** 2) < 0.03
     assert "diffraction" in recipe.evaluate_cell(0.633, 0.6, 0.45, n_sub=1.46)["reason"]
     assert "aspect" in recipe.evaluate_cell(0.633, 1.2, 0.35, max_aspect=10)["reason"]
+    assert recipe.evaluate_cell(0.633, 0.9, 0.35, max_aspect=15, min_feature=0.06, min_gap=0.06,
+                                M=2, n_sizes=3, refine=False)["feasible"]          # exactly at the limit
     assert "size range" in recipe.evaluate_cell(0.633, 0.6, 0.11)["reason"]
 
 

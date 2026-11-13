@@ -6,6 +6,7 @@
     rcwa-metalens run --all | <note.md>        # note workflow (see rcwa/experiments.py)
 
 Options:  --out DIR   write experiments/reports/outputs under DIR (same as $RCWA_PROJECT_DIR)
+          --name N    name the figure/report files N.png / N.md (default CLI_<type>, no .md)
           --version
 
 From a clone without installing:  python metadesign.py <same arguments>
@@ -93,6 +94,12 @@ def main(argv=None):
         if i + 1 >= len(argv):
             print("--out needs a directory"); return 2
         os.environ["RCWA_PROJECT_DIR"] = argv[i + 1]; del argv[i:i + 2]
+    name = None
+    if "--name" in argv:                       # output file name (figure, report) instead of CLI_<type>
+        i = argv.index("--name")
+        if i + 1 >= len(argv):
+            print("--name needs a value"); return 2
+        name = re.sub(r"[^A-Za-z0-9_.-]+", "_", argv[i + 1]); del argv[i:i + 2]
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__); return 0
     from . import experiments as R
@@ -133,10 +140,16 @@ def main(argv=None):
                   + f". Run 'rcwa-metalens help {cmd}'."); return 2
         fm[k] = v
     print(f"Running: {cmd}  parameters={fm or 'defaults'}")
-    fig, body, summary = R.RUNNERS[cmd](fm, "CLI_" + cmd)
+    slug = name or ("CLI_" + cmd)
+    fig, body, summary = R.RUNNERS[cmd](fm, slug)
     print("\n=== RESULT ===\n" + body)
     print(f"\nSummary: {summary}")
     print(f"Figure:  {fig}")
+    if name:                                   # --name: also keep the report text next to the figure
+        md = os.path.splitext(fig)[0] + ".md"
+        with open(md, "w", encoding="utf-8") as f:
+            f.write(f"# {cmd} — {name}\n\nParameters: {fm or 'defaults'}\n\n{body}\n\n**Summary:** {summary}\n")
+        print(f"Report:  {md}")
     return 0
 
 

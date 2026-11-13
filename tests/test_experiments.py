@@ -86,6 +86,12 @@ def test_cli_runs_and_reports():
     assert cli.main(["grating", "perod=1.3"]) == 2          # typo is rejected, not ignored
 
 
+def test_cli_name_option_writes_report():
+    """--name names the figure and also writes the report text next to it."""
+    assert cli.main(["grating", "period=1.3", "--name", "named run"]) == 0
+    assert os.path.isfile(os.path.join(R.SIM, "named_run.png")) and os.path.isfile(os.path.join(R.SIM, "named_run.md"))
+
+
 def test_console_output_survives_cp1252():
     """Windows regression: with a cp1252 (non-UTF-8) stdout — the default when output is
     redirected — the command line must still print its Greek letters and check marks."""

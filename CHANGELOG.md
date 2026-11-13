@@ -31,6 +31,16 @@
   resonances, then the highest NA the period can sample (λ/2L).
 * `examples/18_recipe_unitcell_validation.py`: FDTD check of any recipe (substrate incidence,
   bare-interface reference, test sizes picked away from resonances).
+* **Reference recipes** (`docs/recipes/`, reports + maps, same limits, fused-silica substrate):
+  633 nm ALD TiO₂ → H = 600, L = 375 nm (FOM 0.948, unit cell FDTD-validated); 532 nm LPCVD
+  Si₃N₄ → H = 800, L = 300 nm (FOM 0.947, aspect 13.3; RCWA only); 940 nm amorphous Si →
+  H = 420, L = 350 nm (FOM 0.880, absorbing; RCWA only, single old dataset — measure the film).
+  This meets the 0.4 acceptance item "a recipe for each platform or a proof that none exists";
+  the SiN and a-Si recipes still need certification and FDTD.
+* Fixed: the aspect-ratio limit rejected H = 900 nm at 60 nm features (0.9/0.06 =
+  15.000000000000002 > 15). Fixed: the library cache key used unrounded H, L, λ, so a grid from
+  `np.linspace` (0.6000000000000001) missed results computed at 0.6.
+* CLI: `--name N` names the figure and also writes the report as `N.md`.
 * **633 nm, ALD TiO₂ (Siefke), fused-silica substrate, limits 60 nm / 60 nm / aspect ≤ 15,
   σ = 3 nm** (30 candidates, H 550–800 nm × L 300–400 nm): the current recipe H = 600 nm,
   L = 350 nm does **not** close the phase circle with the measured film index (0.88 × 2π, gap
