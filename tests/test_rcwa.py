@@ -380,7 +380,11 @@ def test_design_core_lens():
     from rcwa import design as dz
     d = dz.design_lens(0.633, 0.35, 0.60, 8.0, 10.0, material="TiO2_t")
     a = dz.analyze_focus(d)
-    assert d["lib"]["coverage"] >= 0.95 and np.all(np.diff(d["lib"]["phase"]) > -0.5)
+    lib = d["lib"]; s = lib["sizes"]
+    smooth = np.ones(len(s) - 1, bool)                      # phase winds through a resonance
+    for r in lib.get("resonances", []):
+        smooth &= ~((s[1:] >= r["lo"] - 0.002) & (s[:-1] <= r["hi"] + 0.002))
+    assert lib["coverage"] >= 0.95 and lib["refined"] and np.all(np.diff(lib["phase"])[smooth] > -0.5)
     assert (d["idx"][~d["inside"]] == -1).all() and (d["idx"][d["inside"]] >= 0).all()
     assert len(d["placements"]) == int(d["inside"].sum())
     assert 0.7 * 10.0 < a["z_focus"] <= 10.2                 # focal shift toward the lens (low Fresnel number)
@@ -689,7 +693,7 @@ def test_resonance_guard_and_robust_selection():
     used = d["idx"][d["inside"]]
     assert d["allowed"][used].all() and d["mode"] == "robust"
     try:
-        dz.design_lens(0.633, 0.35, 0.60, 4.0, 6.0, lib=lib, mode="robust")
+        dz.design_lens(0.633, 0.35, 0.60, 4.0, 6.0, lib=lib, mode="robust", sigma_nm=None)
         raise AssertionError("robust mode without sigma_nm must fail")
     except ValueError:
         pass
@@ -796,6 +800,19 @@ def test_symmetry_falls_back_when_not_applicable():
     r = solve_rcwa_2d(0.633, 0, 0, 1, 1, 0.35, 0.35, [(off, 0.6)], pol=(0., 1.), **kw)
     f = solve_rcwa_2d(0.633, 0, 0, 1, 1, 0.35, 0.35, [(off, 0.6)], pol=(0., 1.), symmetry=False, **kw)
     assert not r["symmetry"] and np.array_equal(r["ty"], f["ty"])
+
+
+def test_design_lens_uses_only_certified_sizes():
+    """N1 in the design: with certify=True the atoms whose phase changes more than the
+    tolerance between M and M+2 are excluded from the selection."""
+    from rcwa import design as dz
+    lib = dz.meta_atom_library(0.633, 0.35, 0.60, sizes=np.linspace(0.08, 0.29, 8),
+                               material="TiO2_t", M=2, use_cache=False)
+    cl = dz.certify_library(lib, tol_phase=0.03, tol_amp=0.05, use_cache=False)
+    ok = cl["convergence"]["ok"]
+    assert ok.dtype == bool and len(ok) == 8 and ok.any() and not ok.all()
+    d = dz.design_lens(0.633, 0.35, 0.60, 4.0, 6.0, lib=cl, certify=True, refine=False, mode="complex")
+    assert ok[d["idx"][d["inside"]]].all()
 
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio

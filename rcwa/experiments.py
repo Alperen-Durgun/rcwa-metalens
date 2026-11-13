@@ -325,7 +325,7 @@ def run_metalens_layout_2d(fm, slug):
     lam0 = num(fm, "lam0", 0.633); Lcell = num(fm, "period", 0.35)
     H = num(fm, "height", 0.60); n_pillar = num(fm, "n_pillar", 2.4)
     mat = fm.get("material", ""); shape = fm.get("shape", "square"); n_sub = num(fm, "n_sub", 1.0)
-    D_lens = num(fm, "D_lens", 20.0); f = num(fm, "f", 25.0); M = int(num(fm, "M", 7, int))
+    D_lens = num(fm, "D_lens", 20.0); f = num(fm, "f", 25.0); M = int(num(fm, "M", 9, int))
     d = dz.design_lens(lam0, Lcell, H, D_lens, f, shape=shape, material=mat, n_pillar=n_pillar, M=M, n_sub=n_sub)
     a = dz.analyze_focus(d)
     D_lens = d["D_lens"]; NA = d["NA"]; ci = d["ci"]; inside = d["inside"]
@@ -640,10 +640,12 @@ def run_metalens_design_full(fm, slug):
     Strehl, MTF, ...) -> fabrication-ready GDS + design JSON for the full-wave bridges."""
     lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.35); H = num(fm, "height", 0.60)
     mat = fm.get("material", "TiO2_t"); shape = fm.get("shape", "circle")
-    D_lens = num(fm, "D_lens", 16.0); f = num(fm, "f", 20.0); M = int(num(fm, "M", 7, int))
-    n_sub = num(fm, "n_sub", 1.0); sel = fm.get("selection", "complex")
+    D_lens = num(fm, "D_lens", 16.0); f = num(fm, "f", 20.0); M = int(num(fm, "M", 9, int))
+    n_sub = num(fm, "n_sub", 1.0); sel = fm.get("selection", "robust")
+    sig = num(fm, "sigma_nm", 3.0); cert = bool(int(num(fm, "certify", 0, int)))
     d = dz.design_lens(lam0, L, H, D_lens, f, shape=shape, material=mat,
-                       n_pillar=num(fm, "n_pillar", 2.4), M=M, n_sub=n_sub, mode=sel)
+                       n_pillar=num(fm, "n_pillar", 2.4), M=M, n_sub=n_sub, mode=sel,
+                       sigma_nm=sig, refine=(sel == "robust"), certify=cert)
     a = dz.analyze_focus(d)
     lib = d["lib"]; n_pillar = float(lib["n"].real); k_pillar = float(lib["n"].imag)
     D_lens = d["D_lens"]; NA = d["NA"]; ci = d["ci"]; inside = d["inside"]; placements = d["placements"]
@@ -839,7 +841,7 @@ def _build_lens(fm):
     """Shared lens builder for the FOV / index-robustness analyses (design.design_lens)."""
     lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.35); H = num(fm, "height", 0.60)
     mat = fm.get("material", "TiO2_t"); shape = fm.get("shape", "circle")
-    D_lens = num(fm, "D_lens", 10.0); f = num(fm, "f", 12.0); M = int(num(fm, "M", 7, int))
+    D_lens = num(fm, "D_lens", 10.0); f = num(fm, "f", 12.0); M = int(num(fm, "M", 9, int))
     return dz.design_lens(lam0, L, H, D_lens, f, shape=shape, material=mat,
                           n_pillar=num(fm, "n_pillar", 2.4), M=M, n_sub=num(fm, "n_sub", 1.0))
 
@@ -933,7 +935,7 @@ def run_lens_tolerance(fm, slug):
     The size response comes from an adaptively refined library (resonances resolved)."""
     lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.35); H = num(fm, "height", 0.60)
     mat = fm.get("material", "TiO2_t"); shape = fm.get("shape", "circle")
-    D_lens = num(fm, "D_lens", 16.0); f = num(fm, "f", 20.0); M = int(num(fm, "M", 7, int))
+    D_lens = num(fm, "D_lens", 16.0); f = num(fm, "f", 20.0); M = int(num(fm, "M", 9, int))
     n_sub = num(fm, "n_sub", 1.0); n_pillar = num(fm, "n_pillar", 2.4)
     bmax = num(fm, "bias_max_nm", 6.0); nb = int(num(fm, "n_bias", 7, int))
     sigma = num(fm, "sigma_nm", 2.0); ntr = int(num(fm, "n_trial", 10, int))
@@ -945,7 +947,8 @@ def run_lens_tolerance(fm, slug):
     kw = dict(shape=shape, material=mat, n_pillar=n_pillar, M=M, n_sub=n_sub)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        designs = {"default": dz.design_lens(lam0, L, H, D_lens, f, lib=base, **kw),
+        designs = {"complex (0.2 rule)": dz.design_lens(lam0, L, H, D_lens, f, lib=base, mode="complex",
+                                                       refine=False, **kw),
                    f"robust σ={rsig:g}nm": dz.design_lens(lam0, L, H, D_lens, f, lib=ref, mode="robust",
                                                          sigma_nm=rsig, guard_nm=guard if guard >= 0 else None, **kw)}
     biases = np.linspace(-bmax, bmax, nb)
@@ -960,9 +963,9 @@ def run_lens_tolerance(fm, slug):
     for a_, yl in ((ax[0], "absolute efficiency"), (ax[1], "Strehl")):
         a_.set_xlabel("uniform size bias (nm)"); a_.set_ylabel(yl); a_.grid(alpha=.3); a_.legend()
         a_.axvline(0, color="gray", ls=":")
-    ax[0].set_title(f"Efficiency (mean ± std, random σ={sigma:g}nm, {tol['default']['n_trial']} trials)")
+    ax[0].set_title(f"Efficiency (mean ± std, random σ={sigma:g}nm, {next(iter(tol.values()))['n_trial']} trials)")
     ax[1].set_title("Strehl")
-    d0 = designs["default"]
+    d0 = next(iter(designs.values()))
     fig.suptitle(f"LENS TOLERANCE — {mat}/{shape}, D={d0['D_lens']:.0f}um f={f}um NA={d0['NA']:.2f}")
     figpath = _out(slug + ".png"); fig.tight_layout(); fig.savefig(figpath, dpi=130); plt.close(fig)
     i0 = int(np.argmin(np.abs(biases)))

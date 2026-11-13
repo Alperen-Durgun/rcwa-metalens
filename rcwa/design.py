@@ -27,8 +27,11 @@ def pillar_index(material=None, lam0=None, n_pillar=2.4):
     return complex(n_pillar)
 
 
-def default_sizes(L, n=20, s_min=0.06, margin=0.05):
-    """Standard size sweep: from s_min up to (L - margin), n samples (um)."""
+def default_sizes(L, n=20, s_min=0.06, margin=0.06):
+    """Standard size sweep: from s_min up to (L - margin), n samples (um).
+    margin = smallest gap between neighbouring pillars. 0.06 since 0.3.0: at a 50 nm gap
+    (the old default) the 633 nm TiO2 library sits on the shoulder of a gap resonance at
+    ~302 nm that M = 7 does not resolve (0.16 rad phase error against M = 15)."""
     return np.linspace(s_min, L - margin, int(n))
 
 
@@ -56,7 +59,7 @@ def _atom_t(job):
 
 
 def meta_atom_library(lam0, L, H, sizes=None, shape="circle", material=None, n_pillar=2.4,
-                      M=7, n_sub=1.0, n_bg=1.0, raster_n=None, use_cache=True, n_jobs=None):
+                      M=9, n_sub=1.0, n_bg=1.0, raster_n=None, use_cache=True, n_jobs=None):
     """Transmission library of a pillar on a square lattice versus its size.
 
     Light is incident from the substrate (index n_sub) and exits into the background
@@ -202,7 +205,10 @@ def certify_library(lib, dM=2, tol_phase=0.02, tol_amp=0.01, tol_res=0.05, sizes
     Returns a copy of lib with lib["convergence"] = {
       M, M_check, sizes, d_phase (rad), d_amp, in_resonance (bool per size),
       max_d_phase, max_d_amp (outside resonances), max_d_phase_resonance,
-      tol_phase, tol_amp, tol_res, passed }."""
+      tol_phase, tol_amp, tol_res, ok (per size), passed }.
+    The M vs M+dM change is an estimate of the remaining error, not a bound: where the
+    convergence is slow (e.g. next to a gap resonance of nearly touching pillars) the true error
+    can be several times larger. Use dM=4 for a stricter check."""
     s_all = np.asarray(lib["sizes"], float); t_all = np.asarray(lib["t"], complex)
     if sizes is None:
         sel = np.arange(len(s_all))
@@ -223,11 +229,12 @@ def certify_library(lib, dM=2, tol_phase=0.02, tol_amp=0.01, tol_res=0.05, sizes
     for r in lib.get("resonances", []):
         inres |= (s >= r["lo"]) & (s <= r["hi"])
     out_ok = ~inres
+    ok = np.where(inres, dphi < tol_res, (dphi < tol_phase) & (damp < tol_amp))
     mx = lambda a, m: float(a[m].max()) if m.any() else 0.0          # noqa: E731
     cert = {"M": int(lib["M"]), "M_check": M2, "sizes": s, "d_phase": dphi, "d_amp": damp,
             "in_resonance": inres, "max_d_phase": mx(dphi, out_ok), "max_d_amp": mx(damp, out_ok),
             "max_d_phase_resonance": mx(dphi, inres), "tol_phase": tol_phase, "tol_amp": tol_amp,
-            "tol_res": tol_res}
+            "tol_res": tol_res, "ok": ok}
     cert["passed"] = bool(cert["max_d_phase"] < tol_phase and cert["max_d_amp"] < tol_amp
                           and cert["max_d_phase_resonance"] < tol_res)
     out = dict(lib); out["convergence"] = cert
@@ -403,17 +410,23 @@ def strehl_at_focus(E0, L, lam0, zf, ff=None, n_bg=1.0, u=4, pad=1.6):
 
 
 # --------------------------------------------------------------------------- one-call designer
-def design_lens(lam0, L, H, D_lens, f, shape="circle", material=None, n_pillar=2.4, M=7,
-                n_sub=1.0, n_bg=1.0, sizes=None, mode="complex", lib=None, refine=False,
-                guard_nm=None, sigma_nm=None, max_gap=np.pi / 4):
+def design_lens(lam0, L, H, D_lens, f, shape="circle", material=None, n_pillar=2.4, M=9,
+                n_sub=1.0, n_bg=1.0, sizes=None, mode="robust", lib=None, refine=True,
+                guard_nm=None, sigma_nm=3.0, max_gap=np.pi / 4, certify=False):
     """Design a singlet metalens: library -> hyperbolic phase -> atom selection.
 
-    Resonance-aware options (all off by default, i.e. the 0.2 behaviour):
+    Defaults since 0.3.0: M = 9, refined library, robust selection for a 3 nm size error
+    (measured: Strehl 0.963 -> 0.989 and absolute efficiency 0.816 -> 0.830 for the 16 um
+    TiO2 test lens, and a far smaller loss under size bias). The 0.2 behaviour is
+    mode="complex", refine=False, M=7 (with sizes=default_sizes(L, margin=0.05)).
+
+    Resonance-aware options:
       refine   : refine the library adaptively (refine_library) and detect resonances
       guard_nm : exclude atoms within guard_nm of a detected resonance (needs a refined library)
       sigma_nm : with mode="robust", the standard deviation of the expected size error; atoms
                  are chosen by expected error over that distribution (size_error_stats)
       max_gap  : warn if the allowed atoms leave a phase gap larger than this (rad)
+      certify  : run certify_library (M vs M+2) and use only sizes that pass it
 
     Returns dict with: lib, ci, R, inside, D_lens (snapped to the lattice), NA, idx (atom index
     map), size_map (um, 0 outside), E0 (aperture field, physics convention), phi_target,
@@ -423,6 +436,14 @@ def design_lens(lam0, L, H, D_lens, f, shape="circle", material=None, n_pillar=2
     if (refine or guard_nm is not None) and not lib.get("refined"):
         lib = refine_library(lib)
     allowed = resonance_mask(lib, guard_nm) if guard_nm is not None else None
+    if certify:
+        if "convergence" not in lib or len(lib["convergence"]["ok"]) != len(lib["sizes"]):
+            lib = certify_library(lib)
+        ok = np.asarray(lib["convergence"]["ok"], bool)
+        allowed = ok if allowed is None else (allowed & ok)
+        if not allowed.any():
+            raise ValueError("design_lens: no library size passes the convergence certificate "
+                             f"(M = {lib['M']} vs {lib['convergence']['M_check']}); increase M")
     gap = max_phase_gap(lib["t"], allowed)
     if gap > max_gap:
         import warnings

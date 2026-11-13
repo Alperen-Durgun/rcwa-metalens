@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Changed defaults — results change (roadmap U4); re-run designs
+
+Measured for the 16 µm TiO₂ test lens (λ = 633 nm, Λ = 350 nm, H = 600 nm, f = 20 µm) on the
+reference laptop. Every change can be undone with a parameter.
+
+| Default | 0.2.1 | now | Why |
+|---|---|---|---|
+| `M` (design, library) | 7 | 9 | passes the convergence certificate (M→M+2: 0.009 rad, M→M+4: 0.014 rad, all sizes); with N2 an M = 9 solve costs less than an M = 7 solve did |
+| size range | 60–300 nm (gap 50 nm) | 60–290 nm (gap 60 nm) | a gap resonance at ~302 nm made the 300 nm pillar converge slowly: 0.16 rad error at M = 7 against M = 15, 0.04 rad still at M = 11 |
+| selection | `complex` | `robust`, σ = 3 nm | |
+| library | uniform 20 sizes | refined (resonances located) | |
+| test lens: Strehl / abs. efficiency | 0.963 / 0.816 | 0.989 / 0.830 | |
+| same lens, bias −4 / 0 / +4 nm + random σ = 2 nm (mean efficiency) | 0.798 / 0.810 / 0.802 (complex rule, new range) | 0.813 / 0.820 / 0.811 | |
+
+* Old behaviour: `design_lens(..., mode="complex", refine=False, M=7,
+  sizes=default_sizes(L, margin=0.05))`. The generators `metalens_design_full`,
+  `metalens_layout_2d`, `fov_analysis`, `index_robustness` and `lens_tolerance` follow the new
+  defaults (`selection=complex` restores the old rule); `metalens_large_tiled` keeps its own
+  complex-rule LUT.
+* `design_lens(..., certify=True)` uses only sizes that pass `certify_library`.
+
 ### Performance — mirror-symmetry reduction of the 2D solver (roadmap N2)
 
 * `solve_rcwa_2d(..., symmetry="auto")` (default): at normal incidence, with a purely x- or
