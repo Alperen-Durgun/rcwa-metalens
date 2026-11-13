@@ -52,8 +52,13 @@ def experiment_params(name):
     goes out of date."""
     from . import experiments as R
     fn = R.RUNNERS[name]; src = inspect.getsource(fn)
-    for helper in re.findall(r"\b(_build_lens)\(fm\)", src):
-        src += "\n" + inspect.getsource(getattr(R, helper))
+    seen = set()                               # helpers that read fm, followed recursively
+    while True:
+        new = set(re.findall(r"\b(_build_lens|_substrate_index)\(fm\b", src)) - seen
+        if not new:
+            break
+        for helper in sorted(new):
+            src += "\n" + inspect.getsource(getattr(R, helper)); seen.add(helper)
     out = {}
     for m in re.finditer(r'(?:num\(fm,\s*|fm\.get\()"(\w+)"\s*(,\s*)?', src):
         key = m.group(1)

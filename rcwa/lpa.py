@@ -1,9 +1,11 @@
-"""Measuring the locally periodic approximation in 2D (roadmap P3) — EXPERIMENTAL.
+"""Measuring the locally periodic approximation in 2D (roadmap P3).
 
-Status (13-11-2026): first supercell results disagree strongly with the LPA at N = 4
-(NA 0.45): LPA (cell-wise constant field) ~0.77 vs full RCWA ~0.45-0.49 into the design order,
-but the supercell RCWA is not converged (M per cell 4 -> 6 changes it by 0.035) and M per cell
-8 exceeds 4 GB of memory. Confirm with an FDTD supercell before drawing conclusions.
+Result for the 633 nm reference recipe (examples/19, validation/P3_metagrating_*): design-order
+efficiency LPA / supercell RCWA (4 orders per cell) / Tidy3D FDTD = 0.787 / 0.828 / 0.820 at
+sin(theta) = 0.42, 0.881 / 0.895 / 0.896 at 0.28, 0.918 / 0.909 / 0.902 at 0.21: the supercell
+RCWA matches FDTD within 0.008 and the LPA is within 3.5 points (pessimistic at the largest
+angle). An earlier test with the approximate TiO2_t table, no substrate and a coarse 12-size
+library looked far worse (~0.45); that setup, not the LPA, was the problem.
 
 A metagrating of N different pillars along x (one lattice period L each, phases 2*pi*k/N chosen
 from a library with the robust rule) deflects normal incidence into one diffraction order at

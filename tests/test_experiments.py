@@ -76,7 +76,11 @@ def test_large_tiled_writes_tiles():
     body, _ = _run("metalens_large_tiled")
     tiles = os.listdir(os.path.join(R.SIM, "T_metalens_large_tiled_gds"))
     n = sum(gds.read_gds_summary(os.path.join(R.SIM, "T_metalens_large_tiled_gds", t))["polygons"] for t in tiles)
-    assert len(tiles) >= 2 and n == 1457
+    # every pillar of the circular aperture is written exactly once (D = 15 um, default period)
+    import numpy as np
+    L = R.RECIPE["period"]; Nc = int(round(15.0 / L)); ci = (np.arange(Nc) - (Nc - 1) / 2) * L
+    X, Y = np.meshgrid(ci, ci, indexing="ij"); expected = int((np.hypot(X, Y) <= Nc * L / 2 + 1e-9).sum())
+    assert len(tiles) >= 2 and n == expected
 
 
 def test_cli_runs_and_reports():

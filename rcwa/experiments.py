@@ -25,6 +25,22 @@ from . import design as dz
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # repository root (when run from a clone)
 
 
+# Default unit-cell recipe of the lens generators (docs/recipes): ALD TiO2 (Siefke data) on fused
+# silica, H = 600 nm, L = 375 nm, at 633 nm - certified and unit-cell FDTD-validated.
+RECIPE = {"material": "TiO2_Siefke", "period": 0.375, "height": 0.60, "substrate": "SiO2_Malitson"}
+
+
+def _substrate_index(fm, lam0):
+    """Substrate index: n_sub=... if given, else the substrate material (default fused silica,
+    'air' or 'none' = 1)."""
+    if "n_sub" in fm:
+        return float(num(fm, "n_sub", 1.0))
+    sub = fm.get("substrate", RECIPE["substrate"])
+    if sub in ("", "air", "none"):
+        return 1.0
+    return float(np.real(np.sqrt(materials.eps_of(sub, num(fm, "lam0", 0.633)))))
+
+
 def project_dirs():
     """Where experiment notes, reports and figures/GDS live -> (root, experiments, reports, outputs).
 
@@ -638,10 +654,10 @@ def run_polarization_multiplexed(fm, slug):
 def run_metalens_design_full(fm, slug):
     """Flagship: shape+material library -> 2D lens design -> metrics (FWHM, efficiency,
     Strehl, MTF, ...) -> fabrication-ready GDS + design JSON for the full-wave bridges."""
-    lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.35); H = num(fm, "height", 0.60)
-    mat = fm.get("material", "TiO2_t"); shape = fm.get("shape", "circle")
+    lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.375); H = num(fm, "height", 0.60)
+    mat = fm.get("material", "TiO2_Siefke"); shape = fm.get("shape", "circle")
     D_lens = num(fm, "D_lens", 16.0); f = num(fm, "f", 20.0); M = int(num(fm, "M", 9, int))
-    n_sub = num(fm, "n_sub", 1.0); sel = fm.get("selection", "robust")
+    n_sub = _substrate_index(fm, lam0); sel = fm.get("selection", "robust")
     sig = num(fm, "sigma_nm", 3.0); cert = bool(int(num(fm, "certify", 0, int)))
     d = dz.design_lens(lam0, L, H, D_lens, f, shape=shape, material=mat,
                        n_pillar=num(fm, "n_pillar", 2.4), M=M, n_sub=n_sub, mode=sel,
@@ -839,11 +855,11 @@ def run_achromatic_design(fm, slug):
 
 def _build_lens(fm):
     """Shared lens builder for the FOV / index-robustness analyses (design.design_lens)."""
-    lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.35); H = num(fm, "height", 0.60)
-    mat = fm.get("material", "TiO2_t"); shape = fm.get("shape", "circle")
+    lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.375); H = num(fm, "height", 0.60)
+    mat = fm.get("material", "TiO2_Siefke"); shape = fm.get("shape", "circle")
     D_lens = num(fm, "D_lens", 10.0); f = num(fm, "f", 12.0); M = int(num(fm, "M", 9, int))
     return dz.design_lens(lam0, L, H, D_lens, f, shape=shape, material=mat,
-                          n_pillar=num(fm, "n_pillar", 2.4), M=M, n_sub=num(fm, "n_sub", 1.0))
+                          n_pillar=num(fm, "n_pillar", 2.4), M=M, n_sub=_substrate_index(fm, lam0))
 
 
 def _prop_focus(E0, L, lam0, f, tilt_deg=0.0, zfix=None):
@@ -933,10 +949,10 @@ def run_lens_tolerance(fm, slug):
     """LENS fabrication tolerance: uniform size bias + random per-pillar error (Monte Carlo) ->
     Strehl / absolute-efficiency distribution, default vs robust atom selection side by side.
     The size response comes from an adaptively refined library (resonances resolved)."""
-    lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.35); H = num(fm, "height", 0.60)
-    mat = fm.get("material", "TiO2_t"); shape = fm.get("shape", "circle")
+    lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.375); H = num(fm, "height", 0.60)
+    mat = fm.get("material", "TiO2_Siefke"); shape = fm.get("shape", "circle")
     D_lens = num(fm, "D_lens", 16.0); f = num(fm, "f", 20.0); M = int(num(fm, "M", 9, int))
-    n_sub = num(fm, "n_sub", 1.0); n_pillar = num(fm, "n_pillar", 2.4)
+    n_sub = _substrate_index(fm, lam0); n_pillar = num(fm, "n_pillar", 2.4)
     bmax = num(fm, "bias_max_nm", 6.0); nb = int(num(fm, "n_bias", 7, int))
     sigma = num(fm, "sigma_nm", 2.0); ntr = int(num(fm, "n_trial", 10, int))
     rsig = num(fm, "robust_sigma_nm", 3.0); guard = num(fm, "guard_nm", -1.0)
@@ -1076,14 +1092,15 @@ def run_metalens_large_tiled(fm, slug):
     tile-by-tile GDS (bounded memory) + preview + cm-scale projection."""
     from rcwa import largelens as LL
     import time
-    lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.35); H = num(fm, "height", 0.60)
-    mat = fm.get("material", "TiO2_t"); shape = fm.get("shape", "circle")
+    lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", 0.375); H = num(fm, "height", 0.60)
+    mat = fm.get("material", "TiO2_Siefke"); shape = fm.get("shape", "circle")
+    n_sub = _substrate_index(fm, lam0)
     D_lens = num(fm, "D_lens", 100.0); f = num(fm, "f", 200.0); M = int(num(fm, "M", 7, int))
     tile = int(num(fm, "tile_cells", 300, int))
     do_gds = str(fm.get("write_gds", "1")).lower() not in ("0", "false", "hayir", "no")
     gdsdir = _out(slug + "_gds") if do_gds else None
     t0 = time.time()
-    st = LL.design_large_lens(lam0, L, H, mat, shape, D_lens, f, M, gds_dir=gdsdir, tile_cells=tile)
+    st = LL.design_large_lens(lam0, L, H, mat, shape, D_lens, f, M, gds_dir=gdsdir, tile_cells=tile, n_sub=n_sub)
     dt = time.time() - t0
     ci = st["ci_ds"]; sm = np.where(st["preview_size_nm"] > 0, st["preview_size_nm"], np.nan)
     fig, ax = plt.subplots(1, 2, figsize=(11, 4.4))

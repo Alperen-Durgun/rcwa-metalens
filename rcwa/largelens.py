@@ -42,12 +42,12 @@ def size_map_vectorized(lut, lam0, L, f, ci):
 
 
 def design_large_lens(lam0, L, H, mat, shape, D_lens, f, M, gds_dir=None,
-                      tile_cells=400, preview_cap=1400, write_gds=True):
+                      tile_cells=400, preview_cap=1400, write_gds=True, n_sub=1.0):
     """Large lens: vectorized selection + tiled GDS. Memory bounded by the tile.
     If gds_dir is given each tile gets its own .gds; if None, statistics+preview only.
     Returns: statistics dictionary + preview (size_map_ds, ci_ds)."""
     from . import gds
-    lut = build_phase_lut(lam0, L, H, mat, shape, M)
+    lut = build_phase_lut(lam0, L, H, mat, shape, M, n_sub=n_sub)
     n_pillar = float(np.real(lut["n"]))
     Nc = int(round(D_lens / L)); D_lens = Nc * L
     ci = (np.arange(Nc) - (Nc - 1) / 2) * L

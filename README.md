@@ -52,7 +52,7 @@ On Windows, `setup_env.bat` creates the environment, `run_tests.bat` runs the te
 ```bash
 rcwa-metalens list                                   # the 25 experiment types
 rcwa-metalens help metalens_design_full              # its parameters and defaults
-rcwa-metalens metalens_design_full D_lens=16 f=20 material=TiO2_t lam0=0.633
+rcwa-metalens metalens_design_full D_lens=16 f=20     # validated recipe: ALD TiO2, 600/375 nm, on glass
 rcwa-metalens recipe_search material=TiO2_Siefke lam0=0.633   # find H and L for a real film
 ```
 

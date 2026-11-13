@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Changed defaults — the lens generators use the validated recipe
+
+* `metalens_design_full`, `fov_analysis`, `index_robustness`, `lens_tolerance` and
+  `metalens_large_tiled` now default to the 633 nm reference recipe (`docs/recipes`): material
+  `TiO2_Siefke` (measured ALD film data) instead of the approximate `TiO2_t` table, period
+  375 nm instead of 350 nm, fused-silica substrate (`substrate=SiO2_Malitson`; `substrate=air`
+  or `n_sub=` to override) instead of none. `experiments.RECIPE` holds the values; the large
+  tiled lens now passes the substrate to its look-up table. The CLI follows helper functions
+  recursively when it lists a generator's parameters. Old behaviour:
+  `material=TiO2_t period=0.35 substrate=air`.
+
+### Validation — the LPA in 2D, metagratings against FDTD (roadmap P3)
+
+* `examples/19_metagrating_lpa_fdtd.py`, `rcwa/lpa.py`: N-pillar metagratings of the 633 nm
+  recipe (design order at sin θ = λ/NL), LPA vs supercell RCWA vs Tidy3D (DiffractionMonitor).
+
+  | N | sin θ | LPA | supercell RCWA | FDTD |
+  |---|---|---|---|---|
+  | 4 | 0.42 | 0.787 | 0.828 | 0.820 |
+  | 6 | 0.28 | 0.881 | 0.895 | 0.896 |
+  | 8 | 0.21 | 0.918 | 0.909 | 0.902 |
+
+  Supercell RCWA matches FDTD within 0.008; the LPA is within 3.5 points up to sin θ = 0.42 and
+  pessimistic at the largest angle (as in the 1D study). Estimated maximum cost 0.109 FlexCredit.
+
 ### Your own process data — measured films and DRC profiles (roadmap M3, F1)
 
 * `materials.register_cauchy`, `register_sellmeier` (ellipsometry fits, range-checked, labelled
