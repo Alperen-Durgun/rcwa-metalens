@@ -114,7 +114,7 @@ if "near" in data.monitor_data:
     fn = data["near"]; xn = np.asarray(fn.Ey.coords["x"].values); yn = np.asarray(fn.Ey.coords["y"].values)
     Ey_n = np.asarray(fn.Ey.isel(f=0).values).reshape(len(xn), len(yn))
     Ex_n = np.asarray(fn.Ex.isel(f=0).values).reshape(len(xn), len(yn))
-    dx = L / 4; Nw = int(np.ceil(sx / dx)); Nw += Nw % 2; g = (np.arange(Nw) - Nw / 2 + 0.5) * dx
+    dx = L / 16; Nw = int(np.ceil(sx / dx)); Nw += Nw % 2; g = (np.arange(Nw) - Nw / 2 + 0.5) * dx
     G = np.stack(np.meshgrid(g, g, indexing="ij"), -1)
     def grid(F):
         re = RegularGridInterpolator((xn, yn), F.real, bounds_error=False, fill_value=0.0)(G)

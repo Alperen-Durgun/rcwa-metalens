@@ -4,17 +4,20 @@
 
 ### V2 lens validation (3D FDTD) - focus criterion not met
 
-* V2 (3D lens, LPA vs Tidy3D FDTD, `examples/20_lens_fdtd_aperture.py`): D = 6 um, f = 6 um, NA 0.45,
-  TiO2_Siefke 600/375 on silica, PEC aperture. FWHM 620 vs 637 nm (+2.8 %, passes 5 %), relative
-  efficiency 0.923 vs 0.906; focus 5.280 vs 5.006 um (-5.2 %, FAILS the 3 % criterion). Diagnostics from
-  a near-field monitor: the FDTD near field propagated with the angular-spectrum method reproduces the
-  FDTD focus (4.958 um), so the propagator is not the cause; the propagating part of the FDTD field
-  averaged per cell agrees with the library (phase rms 0.17 rad, rim -0.23 rad / -20 % amplitude) and
-  gives 5.239 um through the LPA propagator, so neighbour coupling explains < 1 %; open rim outside the
-  cells carries 4.8 % of the power and is not the cause; band-limited instead of cell-constant
-  reconstruction moves the focus the wrong way (5.425 um). The remaining ~4.5 % is sub-cell field content
-  not represented by one value per cell - unresolved. Both models show the low-Fresnel-number focal shift
-  (N_F = 2.4, focus at ~0.85 f). Cost 2 x 0.258 FC (estimate).
+* V2 (3D lens, LPA vs Tidy3D FDTD, `examples/20_lens_fdtd_aperture.py`): TiO2_Siefke 600/375 on
+  silica, PEC aperture, NA 0.45. Two sizes, LPA vs FDTD:
+  - D 6 / f 6 um: focus 5.280 vs 5.006 um (-5.2 %), FWHM 620 vs 637 nm (+2.8 %), eff_rel 0.923 vs 0.906.
+  - D 10 / f 10 um: focus 9.741 vs 9.094 um (-6.6 %), FWHM 671 vs 693 nm (+3.2 %), eff_rel 0.926 vs 0.902.
+  FWHM passes (5 %); the focus criterion (3 %) FAILS at both sizes, so the gap is not a small-lens effect.
+  Near-field diagnostics (D 10, field resampled at L/16): the FDTD near field propagated with the
+  angular-spectrum method gives 9.087 um (direct FDTD 9.094), so the propagation step is exact; the
+  propagating part of the FDTD field averaged per cell agrees with the library (phase rms 0.15 rad, rim
+  -0.12 rad / -17 % amplitude) and gives 9.684 um through the LPA propagator, so neighbour coupling and
+  library errors explain < 1 %; light outside the cells (4.8 % of the power) is not the cause. The gap
+  comes from field content inside the cells that one value per cell does not carry - unresolved, and a
+  band-limited reconstruction of the cell values moves the focus the wrong way. For D 6 the same
+  near-field check is off by 4 % (4.801 vs 5.006 um), so its diagnostic numbers are not reliable.
+  Until resolved, LPA focal lengths carry a ~-7 % uncertainty. Cost (estimates) 2 x 0.258 + 0.896 FC.
 
 ### Changed defaults — the lens generators use the validated recipe
 
