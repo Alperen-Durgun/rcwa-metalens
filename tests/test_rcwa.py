@@ -729,6 +729,18 @@ def test_lens_tolerance_consistency():
     assert np.array_equal(r1["eff"], r2["eff"]) and r1["eff_stats"]["std"][0] > 0
 
 
+
+def test_parallel_library_matches_serial():
+    """N3: the library computed by worker processes equals the serial one to machine precision
+    (not bit for bit: the workers run single-threaded BLAS, which changes summation order)."""
+    from rcwa import design as dz
+    s = [0.10, 0.20, 0.28]
+    kw = dict(sizes=s, material="TiO2_t", M=3, use_cache=False)
+    a = dz.meta_atom_library(0.633, 0.35, 0.60, n_jobs=1, **kw)["t"]
+    b = dz.meta_atom_library(0.633, 0.35, 0.60, n_jobs=2, **kw)["t"]
+    assert np.allclose(a, b, rtol=0, atol=1e-9)
+    assert dz.resolve_jobs(3) == 3 and dz.resolve_jobs(0) >= 1
+
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio
     utf8_stdio()

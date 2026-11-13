@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Performance — parallel library (roadmap N3)
+
+* `meta_atom_library(..., n_jobs=)` and `refine_library(..., n_jobs=)`; default from the
+  `RCWA_N_JOBS` environment variable, else 1 (serial, unchanged). `0` = all cores.
+* `parallel_map` now starts workers with "spawn" and limits each worker to one BLAS thread.
+  Without the limit the workers competed for the cores: 2 workers were 2x slower than serial
+  on a 2-core machine.
+* Measured on the reference laptop (i5-5200U, 2 cores / 4 threads, Windows, 8 sizes, M = 7):
+  serial 14.6 s, 2 workers 14.2 s, 4 workers 11.3 s (1.3x). The serial solve already uses
+  multi-threaded BLAS and spawn start-up costs ~1 s per worker, so the gain is small on this
+  hardware; the roadmap target "≥ 3x on 4 cores" is not reachable on 2 physical cores. Results
+  agree with the serial run to 1e-11 (not bit for bit: single-threaded BLAS sums in another
+  order).
+
 ### Validation — unit cell against FDTD (roadmap V1)
 
 * New `examples/17_unitcell_validation.py`: zeroth-order t from the cell-averaged field over

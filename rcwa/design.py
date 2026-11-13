@@ -9,8 +9,10 @@ library transmission coefficients are converted once, right after the RCWA solve
 hyperbolic lens phase, the angular-spectrum propagator and FDTD tools can be combined with
 them directly.
 """
+import os
 import numpy as np
 from . import materials, shapes, cache
+from .parallel import parallel_map
 from .solver2d import solve_rcwa_2d
 from .convention import to_physical
 from . import metrics
@@ -31,8 +33,30 @@ def default_sizes(L, n=20, s_min=0.06, margin=0.05):
 
 
 # --------------------------------------------------------------------------- library
+def resolve_jobs(n_jobs=None):
+    """Worker count for library solves: n_jobs if given, else the RCWA_N_JOBS environment
+    variable, else 1 (serial). 0 or a negative value means all cores. On Windows a script that
+    uses n_jobs > 1 must keep its top-level code under ``if __name__ == "__main__":``."""
+    if n_jobs is None:
+        try:
+            n_jobs = int(os.environ.get("RCWA_N_JOBS", "1") or 1)
+        except ValueError:
+            n_jobs = 1
+    n_jobs = int(n_jobs)
+    return (os.cpu_count() or 1) if n_jobs <= 0 else n_jobs
+
+
+def _atom_t(job):
+    """Top-level (picklable) worker: zeroth-order co-polarized t of one pillar, raw solver
+    convention. job = (lam0, L, H, shape, size, raster_n, n_pillar, n_bg, n_sub, M)."""
+    lam0, L, H, shape, s, N, n, n_bg, n_sub, M = job
+    eps = shapes.rasterize(shape, s, L, N, n_pillar=n, n_bg=n_bg)
+    r = solve_rcwa_2d(lam0, 0, 0, n_sub ** 2, n_bg ** 2, L, L, [(eps, H)], M, M, pol=(0., 1.))
+    return complex(r["ty"][r["i0"]])
+
+
 def meta_atom_library(lam0, L, H, sizes=None, shape="circle", material=None, n_pillar=2.4,
-                      M=7, n_sub=1.0, n_bg=1.0, raster_n=None, use_cache=True):
+                      M=7, n_sub=1.0, n_bg=1.0, raster_n=None, use_cache=True, n_jobs=None):
     """Transmission library of a pillar on a square lattice versus its size.
 
     Light is incident from the substrate (index n_sub) and exits into the background
@@ -46,17 +70,16 @@ def meta_atom_library(lam0, L, H, sizes=None, shape="circle", material=None, n_p
                  |t|^2 * n_bg / n_sub)
       coverage : phase span in units of 2*pi (>= 1 means a full 2*pi library)
       n        : complex pillar index used
+    n_jobs: worker processes for the solves (see resolve_jobs); results do not depend on it.
     """
     sizes = default_sizes(L) if sizes is None else np.asarray(sizes, float)
     n = pillar_index(material, lam0, n_pillar)
     N = int(raster_n or shapes.DEFAULT_N)
 
     def _compute():
-        t = np.zeros(len(sizes), complex)
-        for k, s in enumerate(sizes):
-            eps = shapes.rasterize(shape, s, L, N, n_pillar=n, n_bg=n_bg)
-            r = solve_rcwa_2d(lam0, 0, 0, n_sub ** 2, n_bg ** 2, L, L, [(eps, H)], M, M, pol=(0., 1.))
-            t[k] = r["ty"][r["i0"]]
+        jobs = [(lam0, L, H, shape, float(s), N, n, n_bg, n_sub, int(M)) for s in sizes]
+        nj = min(resolve_jobs(n_jobs), len(jobs)) if jobs else 1
+        t = np.array(parallel_map(_atom_t, jobs, n_jobs=nj), complex).reshape(len(sizes))
         return {"t_re": t.real, "t_im": t.imag}
 
     key = {"lam0": float(lam0), "L": float(L), "H": float(H), "shape": shape, "M": int(M),
@@ -104,7 +127,7 @@ def find_resonances(sizes, t, prominence=0.2):
 
 
 def refine_library(lib, tol=0.05, min_step=0.5e-3, max_solves=80, prominence=0.2,
-                   use_cache=True):
+                   use_cache=True, n_jobs=None):
     """Adaptive refinement of a meta-atom library (resonance-aware sampling).
 
     Every interval between neighbouring sizes is checked at its midpoint: if the solved t
@@ -121,7 +144,7 @@ def refine_library(lib, tol=0.05, min_step=0.5e-3, max_solves=80, prominence=0.2
     A = float(np.max(np.abs(t)))
     kw = dict(lam0=lib["lam0"], L=lib["L"], H=lib["H"], shape=lib["shape"], material=None,
               n_pillar=lib["n"], M=lib["M"], n_sub=lib["n_sub"], n_bg=lib["n_bg"],
-              raster_n=lib.get("raster_n"), use_cache=use_cache)
+              raster_n=lib.get("raster_n"), use_cache=use_cache, n_jobs=n_jobs)
     ss = sorted(pts)
     todo = [(a, b) for a, b in zip(ss[:-1], ss[1:]) if b - a >= 2 * min_step]
     n_solved = 0
