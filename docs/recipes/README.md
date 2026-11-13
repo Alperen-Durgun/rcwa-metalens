@@ -30,6 +30,22 @@ points if the film is 0.02 higher than the Siefke data, which is exactly the dif
 Jolivet ALD film — measure your film before you fabricate. Use `certify=1 index_dn=0.02` in
 `recipe_search` to get both checks in the report.
 
+## Process sensitivity (633 nm TiO₂ recipe)
+
+Atoms chosen for vertical walls and no residual film, used sizes re-solved with the defect:
+
+| Defect | FOM | Designed for the defect instead |
+|---|---|---|
+| none | 0.961 | — |
+| sidewall 88° | 0.912 | 0.965 (`sidewall_deg=88`) |
+| sidewall 86° | 0.916 | — |
+| TiO₂ residual film 10 nm | 0.941 | — |
+| TiO₂ residual film 20 nm | 0.889 | 0.921 (`residual=("TiO2_Siefke", 0.02)`) |
+
+A 2° taper costs ~5 FOM points — more than a ±4 nm size bias — but almost nothing if the design
+uses the measured angle. Characterize the process first (sidewall angle, residual, film index),
+then design with those numbers.
+
 What the recommendation means: among candidates that close the phase circle (largest phase gap
 ≤ π/4) and whose FOM is within 0.01 of the best, the one with the fewest deep resonances
 (|t| < 0.5), then the highest NA the period can sample (λ/2L). See `docs/conventions.md`,

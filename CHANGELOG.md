@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Fabrication geometry — tapered sidewalls and residual film (roadmap P5, M4)
+
+* `meta_atom_library(..., sidewall_deg=, n_steps=, residual=(material, thickness))`, also in
+  `design_lens` and `recipe.evaluate_cell`; `design.pillar_layers` builds the stack (residual film
+  on the substrate, then the pillar in n_steps slices whose width changes linearly; the size is
+  the mid-height width). The default geometry keeps its cache keys.
+* Checks: a residual film with the substrate's index adds exactly exp(+i k0 n_sub t); a vertical
+  pillar cut into four slices equals the single layer (1e-9); a taper is widest at the bottom.
+* **Process sensitivity of the 633 nm TiO₂ recipe** (atoms chosen for vertical walls and no
+  residual, the used sizes re-solved with the defect, FOM of that fixed selection): nominal
+  0.961; sidewall 88°: 0.912, 86°: 0.916; residual TiO₂ film 10 nm: 0.941, 20 nm: 0.889.
+  A 2° taper costs more than a ±4 nm size bias.
+* **Designing for the known process recovers it:** the same recipe designed and evaluated with an
+  88° library gives FOM (nominal rule) 0.965 — the loss is gone; with a 20 nm residual film 0.921
+  (the film's own reflection remains). Measure sidewall angle and residual thickness (SEM, cross
+  section) and pass them to the design: `design_lens(..., sidewall_deg=, residual=)`.
+
 ### Recipes — certificate and material-index sensitivity (roadmap N1 in the search, M2)
 
 * `recipe.evaluate_cell(..., certify=True)` / `recipe_search certify=1`: the library is
