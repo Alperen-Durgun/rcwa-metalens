@@ -16,6 +16,18 @@
   Si₃N₄ (532 nm) and a-Si (940 nm) pass the certificate; Si₃N₄ is the most index-tolerant
   (±0.02: −0.3 points), a-Si the least (±0.2: −9 to −13 points).
 
+### Validation — all three reference recipes against FDTD (unit cell)
+
+| Recipe | max \|Δ\|t\|\| | max \|Δphase\| | fitted constant phase | est. max cost |
+|---|---|---|---|---|
+| 633 nm ALD TiO₂, H 600 / L 375 | 0.0022 | 0.0094 rad | −0.027 rad | 0.175 + 0.075 FC |
+| 532 nm Si₃N₄, H 800 / L 300 | 0.0025 | 0.030 rad | −0.023 rad | 0.150 FC |
+| 940 nm a-Si (absorbing), H 420 / L 350 | 0.0035 | 0.028 rad | −0.031 rad | 0.150 FC |
+
+Five sizes each, fused-silica substrate, bare-interface reference, Tidy3D 2.12.2, RCWA M = 11;
+records in `validation/V1r_*`. All fields decayed below the shutoff except the two TiO₂ tasks
+next to its 311 nm resonance (re-run, see below).
+
 ### Validation — the recommended 633 nm recipe against FDTD
 
 * Recipe: ALD TiO₂ (Siefke data), circles, H = 600 nm, L = 375 nm, on fused silica, light from
