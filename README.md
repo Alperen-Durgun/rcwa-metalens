@@ -148,8 +148,15 @@ fused silica) agree with Tidy3D within 0.0035 in |t| and 0.030 rad at five sizes
 (`examples/18`, records in `validation/`). 4 nm from a resonance the difference grows to
 0.089 rad, which is why the robust selection avoids those sizes. Refining the FDTD grid (20 → 30 steps per wavelength) moved the 250 nm result by
 0.0007 in |t| and 0.011 rad, the same order as the RCWA–FDTD differences. Scope: one material,
-one wavelength, normal incidence, no substrate. **Not yet repeated for this version:** focusing
-of a small 3D lens (V2, `examples/16_lens_focus_fdtd.py`).
+one wavelength, normal incidence, no substrate.
+
+**FDTD - focusing of small 3D lenses (V2).** Two lenses of the 633 nm recipe (NA 0.45, D 6 and
+10 um, opaque aperture, `examples/20_lens_fdtd_aperture.py`, records in `validation/`). The
+focal analysis predicts a focus 3 % beyond the FDTD focus at 15 grid steps per wavelength
+(5.17 vs 5.01 um, 9.38 vs 9.09 um) and 2.1 % at 25 steps (5.06 um); about half of the
+remaining gap is FDTD grid error. FWHM agrees within 3.5 %, relative efficiency within 2.7
+points (LPA 0.93, FDTD 0.90). This comparison found that the former FFT window of the focal
+analysis biased the focus by up to 5 %; it was fixed (see `docs/conventions.md`).
 
 ## Limits — read before sending a mask to a foundry
 

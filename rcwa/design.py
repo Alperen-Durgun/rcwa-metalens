@@ -370,48 +370,96 @@ def aperture_field(t_lib, idx):
 
 
 # --------------------------------------------------------------------------- propagation
+FFT_PAD = 8.0          # default zero-padding factor of the FFT window (plane fields)
+FFT_MAX_N = 2048       # cap on the FFT window size (samples per side)
+
+
 class FocalField:
-    """Angular-spectrum propagation of a cell-sampled aperture field (physics convention).
+    """Free-space propagation of a cell-sampled aperture field (physics convention).
 
     E0   : (Nc, Nc) complex field, one sample per lattice cell (0 outside the aperture)
     L    : lattice period (um);  lam0: wavelength (um);  n_bg: index behind the lens
-    u    : sub-samples per cell;  pad: zero-padding factor of the computation window
+    u    : sub-samples per cell
+    pad  : zero-padding factor of the FFT window used for plane fields (at / intensity);
+           None = FFT_PAD, reduced if the window would exceed FFT_MAX_N samples (pad_limited)
     tilt_deg : incidence tilt in the x-z plane (adds a linear phase to the aperture)
+
+    On-axis values (on_axis, find_focus, Strehl) use the Rayleigh-Sommerfeld integral of the
+    aperture samples: exact for this aperture and independent of any window. The FFT angular
+    spectrum is periodic: light leaving the aperture at steep angles re-enters from the
+    neighbouring periodic images, and with a window of 1.6 x the aperture (the old default)
+    this moved the on-axis focus of an NA 0.45 lens by up to 5 % (validation V2). Plane
+    metrics (FWHM, efficiencies) converge to < 1 % at pad >= 8.
     """
 
-    def __init__(self, E0, L, lam0, n_bg=1.0, u=4, pad=1.6, tilt_deg=0.0):
+    def __init__(self, E0, L, lam0, n_bg=1.0, u=4, pad=None, tilt_deg=0.0):
         E0 = np.asarray(E0, complex); Nc = E0.shape[0]
         self.lam0 = lam0; self.k = 2 * np.pi / lam0 * n_bg; self.dx = L / u
         Ef = np.kron(E0, np.ones((u, u))); Ncf = Nc * u
+        self.pad_limited = False
+        if pad is None:
+            pad = FFT_PAD
+            if Ncf * pad > FFT_MAX_N:
+                pad = max(2.0, FFT_MAX_N / Ncf); self.pad_limited = True
+                import warnings
+                warnings.warn(f"FocalField: FFT window limited to pad = {pad:.2f} (aperture "
+                              f"{Ncf} samples); plane metrics may carry window errors of a few "
+                              "% - on-axis values are exact", stacklevel=2)
+        self.pad = float(pad)
         N = int(Ncf * pad); N += N % 2                     # even window
-        Ep = np.zeros((N, N), complex); o = (N - Ncf) // 2; Ep[o:o + Ncf, o:o + Ncf] = Ef
-        self.N = N
+        o = (N - Ncf) // 2
+        self.N = N; self._o = o; self._Ncf = Ncf
         self.x = (np.arange(N) - o - Ncf / 2 + 0.5) * self.dx      # aperture centred on x = 0
+        xa = self.x[o:o + Ncf]
         if tilt_deg:
-            Ep = Ep * np.exp(1j * self.k * np.sin(np.deg2rad(tilt_deg)) * self.x[:, None])
+            Ef = Ef * np.exp(1j * self.k * np.sin(np.deg2rad(tilt_deg)) * xa[:, None])
+        self._Ef = Ef
         self.P_incident = float(np.sum(np.abs(E0) > 0)) * u * u    # unit-amplitude illumination
-        self.P_aperture = float(np.sum(np.abs(Ep) ** 2))
-        kx = 2 * np.pi * np.fft.fftfreq(N, d=self.dx); KX, KY = np.meshgrid(kx, kx, indexing="ij")
-        KZ = np.sqrt((self.k ** 2 - KX ** 2 - KY ** 2).astype(complex))
-        self.KZ = np.where(np.imag(KZ) < 0, -KZ, KZ)
-        self.A = np.fft.fft2(Ep)
-        # phase ramp that evaluates the inverse FFT at the aperture centre without an FFT
-        xc = (o + Ncf / 2 - 0.5)                                    # centre in (fractional) samples
-        ramp = np.exp(2j * np.pi * np.fft.fftfreq(N) * xc)
-        self._Ac = self.A * ramp[:, None] * ramp[None, :] / (N * N)
+        self.P_aperture = float(np.sum(np.abs(Ef) ** 2))
+        nz_i, nz_j = np.nonzero(Ef)                                  # Rayleigh-Sommerfeld samples
+        self._rs_U = Ef[nz_i, nz_j]; self._rs_rho2 = xa[nz_i] ** 2 + xa[nz_j] ** 2
+        self._A = None; self._KZ = None
+
+    def _spectrum(self):
+        if self._A is None:
+            N, o, Ncf = self.N, self._o, self._Ncf
+            Ep = np.zeros((N, N), complex); Ep[o:o + Ncf, o:o + Ncf] = self._Ef
+            kx = 2 * np.pi * np.fft.fftfreq(N, d=self.dx); KX, KY = np.meshgrid(kx, kx, indexing="ij")
+            KZ = np.sqrt((self.k ** 2 - KX ** 2 - KY ** 2).astype(complex))
+            self._KZ = np.where(np.imag(KZ) < 0, -KZ, KZ)
+            self._A = np.fft.fft2(Ep)
+        return self._A, self._KZ
+
+    @property
+    def A(self):
+        return self._spectrum()[0]
+
+    @property
+    def KZ(self):
+        return self._spectrum()[1]
 
     def at(self, z):
-        """Complex field in the plane z (N x N)."""
-        return np.fft.ifft2(self.A * np.exp(1j * self.KZ * z))
+        """Complex field in the plane z (N x N), FFT angular spectrum (window: pad)."""
+        A, KZ = self._spectrum()
+        return np.fft.ifft2(A * np.exp(1j * KZ * z))
 
     def intensity(self, z):
         return np.abs(self.at(z)) ** 2
 
+    def on_axis_field(self, z):
+        """Complex on-axis field at one or many z: Rayleigh-Sommerfeld (first kind) sum over
+        the aperture samples, U(0,0,z) = (1/2pi) sum U0 (z/r)(1/r - ik) exp(ikr)/r dA."""
+        zz = np.atleast_1d(np.asarray(z, float)); dA = self.dx * self.dx; k = self.k
+        out = np.empty(len(zz), complex)
+        for n, zi in enumerate(zz):
+            r = np.sqrt(self._rs_rho2 + zi * zi)
+            out[n] = np.sum(self._rs_U * (zi / r) * (1 / r - 1j * k) * np.exp(1j * k * r) / r)
+        out *= dA / (2 * np.pi)
+        return out if np.ndim(z) else complex(out[0])
+
     def on_axis(self, z):
-        """On-axis intensity at one or many z (no FFT per plane — fast)."""
-        zz = np.atleast_1d(np.asarray(z, float))
-        out = np.array([abs(np.sum(self._Ac * np.exp(1j * self.KZ * zi))) ** 2 for zi in zz])
-        return out if np.ndim(z) else float(out[0])
+        """On-axis intensity at one or many z (exact, no window; see on_axis_field)."""
+        return np.abs(self.on_axis_field(z)) ** 2
 
     def find_focus(self, f, zwin=(0.4, 1.8), nz=81, off_axis=False):
         """Best-focus search around the design focal length f.
@@ -438,7 +486,7 @@ def ideal_aperture(E0, L, lam0, zf, n_bg=1.0):
     return np.abs(E0) * np.exp(1j * lens_phase(np.hypot(XX, YY), lam0 / n_bg, zf))
 
 
-def strehl_at_focus(E0, L, lam0, zf, ff=None, n_bg=1.0, u=4, pad=1.6):
+def strehl_at_focus(E0, L, lam0, zf, ff=None, n_bg=1.0, u=4, pad=None):
     """Strehl ratio referenced to the SAME plane: on-axis intensity of the design at its own
     focus zf divided by that of an aberration-free lens with the same aperture amplitudes
     focused at zf. By construction <= 1 (up to sampling), also for low Fresnel numbers where
@@ -515,7 +563,7 @@ def design_lens(lam0, L, H, D_lens, f, shape="circle", material=None, n_pillar=2
             "phase_gap": gap, "mode": mode, "sigma_nm": sigma_nm, "guard_nm": guard_nm}
 
 
-def analyze_focus(design, u=4, pad=1.6, nz=81):
+def analyze_focus(design, u=4, pad=None, nz=81):
     """Focal analysis of a design_lens() result with the standard metric set.
     Returns dict: z_focus, fwhm (um), strehl, efficiency suite, encircled-energy radius,
     sidelobe, depth of focus, plus the fields needed for plotting (I, x, zc, I_axis)."""
@@ -551,7 +599,7 @@ def perturbed_field(design, lib_dense, delta):
 
 
 def lens_tolerance(design, lib_dense=None, bias_nm=(-4, -2, 0, 2, 4), sigma_nm=0.0, n_trial=20,
-                   seed=0, u=4, pad=1.6, nz=41):
+                   seed=0, u=4, pad=None, nz=41):
     """Fabrication tolerance of a lens: every pillar size becomes s + bias + N(0, sigma^2) (nm),
     for each uniform bias in bias_nm; sigma_nm = 0 gives the bias-only (deterministic) case.
     Uses the interpolated size response of a refined library (no extra solves). Against

@@ -978,6 +978,28 @@ def test_lpa_metagrating_tool():
     d = lpa.lpa_deflection(ideal, np.arange(4))
     assert abs(d["ideal_sampling"] - 1) < 1e-12 and abs(d["cellwise"] - np.sinc(0.25) ** 2) < 1e-12
 
+
+def test_focal_field_on_axis_is_window_independent():
+    """V2 finding: the periodic FFT window moved the on-axis focus by several %. The on-axis
+    Rayleigh-Sommerfeld sum must not depend on pad and must match a very large FFT window."""
+    from rcwa import design as dz
+    L, lam, f, Nc = 0.375, 0.633, 6.0, 17
+    ci = (np.arange(Nc) - (Nc - 1) / 2) * L; XX, YY = np.meshgrid(ci, ci, indexing="ij")
+    E0 = np.where(np.hypot(XX, YY) <= 3.0, 1.0, 0.0) * np.exp(1j * dz.lens_phase(np.hypot(XX, YY), lam, f))
+    z = [dz.FocalField(E0, L, lam, pad=p).find_focus(f, nz=161)[0] for p in (1.6, 2.0, 8.0)]
+    assert max(z) - min(z) < 1e-9
+    big = dz.FocalField(E0, L, lam, pad=32.0)
+    A, KZ = big.A, big.KZ; jc = int(np.argmin(np.abs(big.x)))
+    zz = np.linspace(4.0, 7.0, 7)
+    fft_axis = np.array([abs(np.fft.ifft2(A * np.exp(1j * KZ * q))[jc, jc]) ** 2 for q in zz])
+    # the FFT grid samples x = +-dx/2 around the axis; compare with the exact sum at that point
+    small_shift = dz.FocalField(E0, L, lam, pad=32.0)
+    small_shift._rs_rho2 = (big.x[big._o:big._o + big._Ncf][np.nonzero(big._Ef)[0]] - big.x[jc]) ** 2 + \
+        (big.x[big._o:big._o + big._Ncf][np.nonzero(big._Ef)[1]] - big.x[jc]) ** 2
+    assert np.max(np.abs(small_shift.on_axis(zz) / fft_axis - 1)) < 0.01
+    small = dz.FocalField(E0, L, lam, pad=1.6)
+    assert abs(small.on_axis(5.0) / big.on_axis(5.0) - 1) < 1e-12
+
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio
     utf8_stdio()

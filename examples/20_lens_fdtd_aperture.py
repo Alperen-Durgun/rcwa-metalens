@@ -104,8 +104,16 @@ es = metrics.efficiency_suite(Iu, u, fw, P_incident=None) if "P_incident" in met
 U, V = np.meshgrid(u, u, indexing="ij"); pk = np.unravel_index(np.argmax(Iu), Iu.shape)
 r = np.hypot(U - u[pk[0]], V - u[pk[1]])
 eff_rel = float(Iu[r <= 3 * fw].sum() / Iu.sum())
-fd = {"z_focus": zf - z_exit, "fwhm": fw, "eff_relative": eff_rel, "xy_plane_z": lpa["z_focus"]}
-dz_rel = (fd["z_focus"] - lpa["z_focus"]) / lpa["z_focus"]; dfw = (fd["fwhm"] - lpa["fwhm"]) / lpa["fwhm"]
+z_xy = float(np.atleast_1d(fxy.Ey.coords["z"].values)[0]) - z_exit   # plane of the saved xy monitor
+fd = {"z_focus": zf - z_exit, "fwhm": fw, "eff_relative": eff_rel, "xy_plane_z": z_xy}
+# LPA in the SAME plane as the FDTD xy monitor (with --load that plane is the one of the run)
+ffl = an["field"]; Il = ffl.intensity(z_xy); xl = ffl.x
+fwl = metrics.focal_metrics(Il, xl)["fwhm_x"]
+UL, VL = np.meshgrid(xl, xl, indexing="ij"); pkl = np.unravel_index(np.argmax(Il), Il.shape)
+rl = np.hypot(UL - xl[pkl[0]], VL - xl[pkl[1]])
+lpa["fwhm_in_fdtd_plane"] = float(fwl); lpa["eff_relative_in_fdtd_plane"] = float(Il[rl <= 3 * fwl].sum() / Il.sum())
+dz_rel = (fd["z_focus"] - lpa["z_focus"]) / lpa["z_focus"]
+dfw = (fd["fwhm"] - lpa["fwhm_in_fdtd_plane"]) / lpa["fwhm_in_fdtd_plane"]
 ok = abs(dz_rel) < 0.03 and abs(dfw) < 0.05
 
 # ---- diagnostic: FDTD near field (a) propagated with the LPA angular-spectrum method, (b) per-cell phase vs design
@@ -120,22 +128,31 @@ if "near" in data.monitor_data:
         re = RegularGridInterpolator((xn, yn), F.real, bounds_error=False, fill_value=0.0)(G)
         im = RegularGridInterpolator((xn, yn), F.imag, bounds_error=False, fill_value=0.0)(G)
         return re + 1j * im
-    Eg = grid(Ey_n); Np = 2 * Nw; Ep = np.zeros((Np, Np), complex); o = (Np - Nw) // 2; Ep[o:o + Nw, o:o + Nw] = Eg
+    Eg = grid(Ey_n); Np = 2 * Nw; o = (Np - Nw) // 2
     k0 = 2 * np.pi / LAM0; kx = 2 * np.pi * np.fft.fftfreq(Np, d=dx); KX, KY = np.meshgrid(kx, kx, indexing="ij")
-    KZ = np.sqrt((k0 ** 2 - KX ** 2 - KY ** 2).astype(complex)); KZ = np.where(np.imag(KZ) < 0, -KZ, KZ)
-    xc = o + Nw / 2 - 0.5; ramp = np.exp(2j * np.pi * np.fft.fftfreq(Np) * xc)
-    best = None
-    for sgn in (+1, -1):                       # time convention: field as is, or its conjugate (physics branch)
-        A = np.fft.fft2(Ep if sgn > 0 else np.conj(Ep)); Ac = A * ramp[:, None] * ramp[None, :] / Np ** 2
+    GX, GY = np.meshgrid(g, g, indexing="ij")
+
+    def rs_focus(field):
+        """On-axis focus of a sampled field by the Rayleigh-Sommerfeld sum (no FFT window; the
+        periodic FFT window shifted this diagnostic by several % for D 6, see design.FocalField)."""
+        nzm = np.abs(field) > 0; U = field[nzm]; rho2 = GX[nzm] ** 2 + GY[nzm] ** 2
         zc = np.linspace(0.4 * F, 1.8 * F, 281) - Z_NEAR
-        Iz = np.array([abs(np.sum(Ac * np.exp(1j * KZ * z))) ** 2 for z in zc])
+        Iz = np.empty(len(zc))
+        for n, z in enumerate(zc):
+            r = np.sqrt(rho2 + z * z)
+            Iz[n] = abs(np.sum(U * (z / r) * (1 / r - 1j * k0) * np.exp(1j * k0 * r) / r)) ** 2
         i = int(np.argmax(Iz)); zq = float(zc[i])
         if 0 < i < len(zc) - 1:
             a1, b1, c1 = Iz[i - 1], Iz[i], Iz[i + 1]; den = a1 - 2 * b1 + c1
             if den < 0:
                 zq = float(zc[i] + 0.5 * (a1 - c1) / den * (zc[1] - zc[0]))
-        if best is None or Iz.max() > best[1]:
-            best = (zq + Z_NEAR, float(Iz.max()), sgn)
+        return zq + Z_NEAR, float(Iz.max())
+
+    best = None
+    for sgn in (+1, -1):                       # time convention: field as is, or its conjugate (physics branch)
+        zq, Imax = rs_focus(Eg if sgn > 0 else np.conj(Eg))
+        if best is None or Imax > best[1]:
+            best = (zq, Imax, sgn)
     diag["z_focus_fdtd_nearfield_propagated"] = best[0]; diag["time_sign"] = best[2]
     # per-cell average of Ey vs the design aperture field
     E0 = np.asarray(d["E0"]); Nc = E0.shape[0]; ci = (np.arange(Nc) - (Nc - 1) / 2) * L
@@ -167,12 +184,7 @@ if "near" in data.monitor_data:
             if E0[i_, j_] != 0:
                 on[np.ix_(mx, np.abs(g - cy) < L / 2)] = True
     Em = np.where(on, Eg, 0) if best[2] > 0 else np.where(on, np.conj(Eg), 0)
-    Epm = np.zeros((Np, Np), complex); Epm[o:o + Nw, o:o + Nw] = Em
-    Acm = np.fft.fft2(Epm) * ramp[:, None] * ramp[None, :] / Np ** 2
-    zc = np.linspace(0.4 * F, 1.8 * F, 281) - Z_NEAR
-    Izm = np.array([abs(np.sum(Acm * np.exp(1j * KZ * z))) ** 2 for z in zc]); i = int(np.argmax(Izm)); zq = float(zc[i])
-    a1, b1, c1 = Izm[i - 1], Izm[i], Izm[i + 1]; den = a1 - 2 * b1 + c1
-    zq = float(zc[i] + 0.5 * (a1 - c1) / den * (zc[1] - zc[0])) if den < 0 else zq
+    zq = rs_focus(Em)[0] - Z_NEAR
     diag["z_focus_fdtd_nearfield_cells_only"] = zq + Z_NEAR
     diag["rim_power_fraction"] = float(np.sum(np.abs(Eg[~on]) ** 2) / np.sum(np.abs(Eg) ** 2))
     # (e) propagating part only (|k| < k0) of the FDTD near field, then cell-averaged -> LPA propagator.
@@ -210,8 +222,9 @@ if "near" in data.monitor_data:
               f" rel |E| {q['rel_amp']:.3f}")
 print("\nRESULT  (LPA vs FDTD)")
 print(f"  focus  {lpa['z_focus']:.3f} vs {fd['z_focus']:.3f} um   ({dz_rel*100:+.1f} %)")
-print(f"  FWHM   {lpa['fwhm']*1000:.0f} vs {fd['fwhm']*1000:.0f} nm   ({dfw*100:+.1f} %)  [FDTD FWHM in the plane of the LPA focus]")
-print(f"  eff_rel {lpa['eff_relative']:.3f} vs {fd['eff_relative']:.3f}")
+print(f"  FWHM   {lpa['fwhm_in_fdtd_plane']*1000:.0f} vs {fd['fwhm']*1000:.0f} nm   ({dfw*100:+.1f} %)  "
+      f"[both in the FDTD monitor plane z = {z_xy:.3f} um]")
+print(f"  eff_rel {lpa['eff_relative_in_fdtd_plane']:.3f} vs {fd['eff_relative']:.3f}  [same plane]")
 print(f"  final field decay {getattr(data, 'final_decay_value', float('nan')):.1e}")
 print(f"\nV2 {'PASSED' if ok else 'FAILED'} (focus within 3 %, FWHM within 5 %)")
 os.makedirs("validation", exist_ok=True)

@@ -99,8 +99,19 @@ for one material, wavelength and shape.
 
 ## Focal analysis and metric definitions
 
-`design.analyze_focus` propagates the cell-sampled aperture field with the angular-spectrum
-method (4 sub-samples per cell, zero-padded window) and reports:
+`design.analyze_focus` propagates the cell-sampled aperture field (4 sub-samples per cell).
+On-axis values - the focus search, `z_focus`, the Strehl ratio, the depth of focus - use the
+Rayleigh-Sommerfeld integral of the aperture samples, which is exact for that aperture and has
+no computation window. Focal-plane fields (FWHM, efficiencies, encircled energy) use the FFT
+angular spectrum in a window zero-padded to 8 x the aperture (`FFT_PAD`; capped at
+`FFT_MAX_N` = 2048 samples, with a warning, for very large lenses).
+
+Why: the FFT angular spectrum is periodic, so light leaving the aperture at steep angles
+re-enters from the neighbouring periodic images. With the former window of 1.6 x the
+aperture this moved the on-axis focus of NA 0.45 test lenses by 2-5 % (validation V2: D 6 um,
+f 6 um reported 5.28 instead of 5.17 um) and the FWHM by up to 4 %; at 8 x the plane metrics
+are converged to < 1 %. `tests/test_rcwa.py::test_focal_field_on_axis_is_window_independent`
+guards this. Reported keys:
 
 | Key | Definition |
 |---|---|

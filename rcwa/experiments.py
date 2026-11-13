@@ -812,21 +812,16 @@ def run_achromatic_design(fm, slug):
         kA = int(np.argmin(dphi + gdw * dgd)); kS = int(np.argmin(dphi))
         idxA[i, j] = kA; idxS[i, j] = kS
         size_map[i, j] = size_flat[kA]; h_map[i, j] = h_flat[kA]
-    u = 3; dx = L / u
+    u = 3
     def _prop_multilam(idxmap):
         fz = []; fw = []
         for k, lam in enumerate(lams):
             phk = phflat[:, k]; amk = amflat[:, k]; Ek = np.zeros((Nc, Nc), complex)
             for (i, j) in ins_ij:
                 Ek[i, j] = amk[idxmap[i, j]] * np.exp(1j * phk[idxmap[i, j]])
-            Ef = np.kron(Ek, np.ones((u, u))); Ncf = Nc * u; pad = int(Ncf * 1.6)
-            Ep = np.zeros((pad, pad), complex); o = (pad - Ncf) // 2; Ep[o:o + Ncf, o:o + Ncf] = Ef
-            kx = 2 * np.pi * np.fft.fftfreq(pad, d=dx); KX, KY = np.meshgrid(kx, kx, indexing="ij")
-            k0 = 2 * np.pi / lam; KZ = np.sqrt((k0 ** 2 - KX ** 2 - KY ** 2).astype(complex)); KZ = np.where(np.imag(KZ) < 0, -KZ, KZ)
-            A = np.fft.fft2(Ep); zc = np.linspace(0.5 * f, 1.6 * f, 40)
-            Iax = [np.abs(np.fft.ifft2(A * np.exp(1j * KZ * z))[pad // 2, pad // 2]) ** 2 for z in zc]
-            zf = zc[int(np.argmax(Iax))]; I = np.abs(np.fft.ifft2(A * np.exp(1j * KZ * zf))) ** 2
-            xax = (np.arange(pad) - pad // 2) * dx; cut = I[:, pad // 2] / I[:, pad // 2].max()
+            ff = dz.FocalField(Ek, L, lam, u=u)          # exact on-axis focus, padded plane field
+            zf = ff.find_focus(f, zwin=(0.5, 1.6), nz=40)[0]; I = ff.intensity(zf)
+            xax = ff.x; jc = int(np.argmin(np.abs(xax))); cut = I[:, jc] / I[:, jc].max()
             ab = np.where(cut >= 0.5)[0]; fw.append((xax[ab[-1]] - xax[ab[0]]) * 1000 if ab.size >= 2 else float("nan"))
             fz.append(zf)
         return fz, fw

@@ -2,26 +2,41 @@
 
 ## Unreleased
 
-### V2 lens validation (3D FDTD) - focus criterion not met
+### Fixed — focal analysis window bias (found by V2)
 
-* V2 (3D lens, LPA vs Tidy3D FDTD, `examples/20_lens_fdtd_aperture.py`): TiO2_Siefke 600/375 on
-  silica, PEC aperture, NA 0.45. Two sizes, LPA vs FDTD:
-  - D 6 / f 6 um: focus 5.280 vs 5.006 um (-5.2 %), FWHM 620 vs 637 nm (+2.8 %), eff_rel 0.923 vs 0.906.
-  - D 10 / f 10 um: focus 9.741 vs 9.094 um (-6.6 %), FWHM 671 vs 693 nm (+3.2 %), eff_rel 0.926 vs 0.902.
-  FWHM passes (5 %); the focus criterion (3 %) FAILS at both sizes, so the gap is not a small-lens effect.
-  Near-field diagnostics (D 10, field resampled at L/16): the FDTD near field propagated with the
-  angular-spectrum method gives 9.087 um (direct FDTD 9.094), so the propagation step is exact; the
-  propagating part of the FDTD field averaged per cell agrees with the library (phase rms 0.15 rad, rim
-  -0.12 rad / -17 % amplitude) and gives 9.684 um through the LPA propagator, so neighbour coupling and
-  library errors explain < 1 %; light outside the cells (4.8 % of the power) is not the cause. The gap
-  comes from field content inside the cells that one value per cell does not carry - unresolved, and a
-  band-limited reconstruction of the cell values moves the focus the wrong way. For D 6 the same
-  near-field check is off by 4 % (4.801 vs 5.006 um), so its diagnostic numbers are not reliable.
-  FDTD grid convergence (D 6, 15 -> 25 steps per wavelength, ~1.8 FC estimate): focus 5.006 -> 5.060 um
-  (gap -5.2 -> -4.2 %), FWHM +2.8 -> +1.8 %, eff_rel 0.906 -> 0.905; a second-order extrapolation
-  gives ~5.09 um (gap ~-3.6 %). About 1 point of the gap is FDTD grid error; ~3.5-4 % is the LPA
-  aperture model. The low-passed per-cell field is unchanged with the grid (5.238 um).
-  Until resolved, LPA focal lengths carry a ~-4 % uncertainty (real lens focuses shorter). Cost (estimates) 2 x 0.258 + 0.896 FC.
+* `design.FocalField`: on-axis values (`on_axis`, `find_focus`, `strehl_at_focus`, depth of
+  focus) now use the Rayleigh-Sommerfeld integral of the aperture samples - exact, no window.
+  The FFT angular spectrum is periodic and its window was only 1.6 x the aperture, so light
+  leaving at steep angles re-entered from the periodic images: the focus of NA 0.45 lenses
+  moved by 2-5 % and zig-zagged with the window size (D 6 um: 5.28 / 5.38 / 5.07 / 5.20 um at
+  pad 1.6 / 2 / 3 / 4; converged 5.17 um). A band-limited angular spectrum does not cure it.
+  Plane fields (FWHM, efficiencies) keep the FFT, now padded 8 x by default (`FFT_PAD`, capped
+  at `FFT_MAX_N` = 2048 samples with a warning); FWHM converges to < 1 % there (was up to 4 %
+  off). The FFT is computed lazily, only when a plane field is requested.
+* Changed results: every lens metric from `analyze_focus` and the generators that use it.
+  Benchmark `lens_16um_default`: focus 19.50 -> 19.18 um, Strehl 0.989 -> 0.965, FWHM
+  0.847 -> 0.842 um, absolute efficiency 0.830 -> 0.829 (baseline values updated; timings kept).
+  Library and recipe figures of merit (`recipe.library_fom`) do not propagate and are unchanged.
+* The achromatic-lens experiment uses `FocalField` instead of its own 1.6 x FFT window.
+* New test `test_focal_field_on_axis_is_window_independent`.
+
+### V2 lens validation (3D FDTD)
+
+* `examples/20_lens_fdtd_aperture.py`: 633 nm recipe (TiO2_Siefke 600/375 on silica), PEC
+  aperture, NA 0.45. Corrected focal analysis vs Tidy3D:
+  - D 6 / f 6 um: focus 5.167 vs 5.006 um at 15 steps/wavelength (-3.1 %), 5.060 um at 25 steps
+    (-2.1 %, passes 3 %); a second-order extrapolation gives ~5.09 um (~-1.5 %).
+  - D 10 / f 10 um (15 steps only; 25 steps would cost ~6 FC): focus 9.382 vs 9.094 um (-3.1 %).
+  - FWHM in the FDTD monitor plane: 654 vs 637 / 631 nm (D 6, 15 / 25 steps), 704 vs 693 nm
+    (D 10); relative efficiency 0.928 vs 0.905 (D 6), 0.929 vs 0.902 (D 10).
+  The earlier report of this entry (focus -5.2 / -6.6 %, "unresolved sub-cell content") was
+  the window bias above, not a limit of the locally periodic approximation; the "LPA" side of
+  the near-field diagnostics used the same biased propagator. Remaining gap ~2 % (about half
+  FDTD grid error at 15 steps). The per-cell field in FDTD matches the library within 0.15 rad
+  rms (rim -0.12 rad, -17 % amplitude); light outside the cells carries 4.8 % of the power.
+* The example now compares FWHM and efficiency in the FDTD monitor plane and computes its
+  near-field diagnostics with the Rayleigh-Sommerfeld sum (not yet re-run on the saved data).
+* Cost (estimates): 2 x 0.258 + 0.896 + ~1.8 FC.
 
 ### Changed defaults — the lens generators use the validated recipe
 
