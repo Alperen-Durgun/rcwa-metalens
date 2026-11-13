@@ -23,13 +23,13 @@ def rayleigh_safe_scale(kx, ky, ers, tol=1e-9):
 
 def homogeneous_modes(KX, KY, er, ur=1.0):
     """Eigenmodes of a homogeneous region (W=I, V, KZ)."""
-    P = KX.shape[0]
-    I = np.eye(P, dtype=complex)
-    Q = (1.0 / ur) * np.block([[KX @ KY, ur * er * I - KX @ KX],
-                               [KY @ KY - ur * er * I, -KY @ KX]])
-    kz = np.conj(np.sqrt((er * ur) - np.diag(KX) ** 2 - np.diag(KY) ** 2 + 0j))   # KX, KY are diagonal
+    kx, ky = np.diag(KX), np.diag(KY)                                  # KX, KY are diagonal
+    D = np.diag
+    Q = (1.0 / ur) * np.block([[D(kx * ky), D(ur * er - kx * kx)],
+                               [D(ky * ky - ur * er), D(-(ky * kx))]])
+    kz = np.conj(np.sqrt((er * ur) - kx ** 2 - ky ** 2 + 0j))
     KZ = np.diag(kz)
-    W = np.eye(2 * P, dtype=complex)
+    W = np.eye(2 * len(kx), dtype=complex)
     V = Q / (1j * np.concatenate([kz, kz]))[None, :]        # Q @ inv(LAM), LAM diagonal
     return W, V, KZ
 
@@ -75,20 +75,44 @@ def layer_smatrix(W, V, lam, k0, d, Wg, Vg):
     return (S11, S12, S12, S11)
 
 
-def modes_from_ER(ER, KX, KY, ERx=None, ERy=None):
-    """Layer eigenmodes (W, V, lam) from a given convolution matrix ER.
-    Works with both 1D (convmat1d) and 2D (convmat2d) ER — the core is the same.
-    ERx / ERy: optional Li-factorized matrices multiplying Ex / Ey (see convmat2d_li);
-    when omitted the plain Laurent ER is used for both."""
+def pq_matrices(ER, KX, KY, ERx=None, ERy=None):
+    """The P and Q matrices of a layer (Omega^2 = P Q), Rumpf formulation.
+    KX, KY are diagonal, so the products are row/column scalings (no dense matmul)."""
     P = KX.shape[0]
     I = np.eye(P, dtype=complex)
     ERi = np.linalg.inv(ER)
     ERx = ER if ERx is None else ERx
     ERy = ER if ERy is None else ERy
-    Pmat = np.block([[KX @ ERi @ KY, I - KX @ ERi @ KX],
-                     [KY @ ERi @ KY - I, -KY @ ERi @ KX]])
-    Qmat = np.block([[KX @ KY, ERy - KX @ KX],
-                     [KY @ KY - ERx, -KY @ KX]])
+    kx, ky = np.diag(KX), np.diag(KY)
+    if np.count_nonzero(KX - np.diag(kx)) or np.count_nonzero(KY - np.diag(ky)):
+        Pmat = np.block([[KX @ ERi @ KY, I - KX @ ERi @ KX],
+                         [KY @ ERi @ KY - I, -KY @ ERi @ KX]])
+        Qmat = np.block([[KX @ KY, ERy - KX @ KX],
+                         [KY @ KY - ERx, -KY @ KX]])
+        return Pmat, Qmat
+    sc = lambda a, M, b: a[:, None] * M * b[None, :]           # noqa: E731  diag(a) M diag(b)
+    Pmat = np.block([[sc(kx, ERi, ky), I - sc(kx, ERi, kx)],
+                     [sc(ky, ERi, ky) - I, -sc(ky, ERi, kx)]])
+    Qmat = np.block([[np.diag(kx * ky), ERy - np.diag(kx * kx)],
+                     [np.diag(ky * ky) - ERx, -np.diag(ky * kx)]])
+    return Pmat, Qmat
+
+
+def modes_from_PQ(Pmat, Qmat):
+    """Eigenmodes (W, V, lam) from P and Q (full or symmetry-reduced)."""
+    w2, W = eig(Pmat @ Qmat)
+    lam = np.sqrt(w2.astype(complex))
+    lam = np.where(np.real(lam) < 0, -lam, lam)
+    V = (Qmat @ W) / lam[None, :]
+    return W, V, lam
+
+
+def modes_from_ER(ER, KX, KY, ERx=None, ERy=None):
+    """Layer eigenmodes (W, V, lam) from a given convolution matrix ER.
+    Works with both 1D (convmat1d) and 2D (convmat2d) ER — the core is the same.
+    ERx / ERy: optional Li-factorized matrices multiplying Ex / Ey (see convmat2d_li);
+    when omitted the plain Laurent ER is used for both."""
+    Pmat, Qmat = pq_matrices(ER, KX, KY, ERx, ERy)
     w2, W = eig(Pmat @ Qmat)
     lam = np.sqrt(w2.astype(complex))
     lam = np.where(np.real(lam) < 0, -lam, lam)

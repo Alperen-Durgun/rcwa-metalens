@@ -188,6 +188,51 @@ def max_phase_gap(t_lib, allowed=None):
     return float(np.max(np.diff(np.r_[ph, ph[0] + 2 * np.pi])))
 
 
+
+def certify_library(lib, dM=2, tol_phase=0.02, tol_amp=0.01, tol_res=0.05, sizes=None,
+                    use_cache=True, n_jobs=None):
+    """Convergence certificate of a library in the Fourier order count (roadmap N1).
+
+    Every size (or the given subset) is solved again at M + dM; the phase and |t| changes are
+    the certificate. Energy conservation, which solve_2d_auto checks, is necessary but not
+    sufficient: an under-resolved solve can conserve energy and still have the wrong phase.
+    Sizes inside a detected resonance band (lib["resonances"], if any) use the looser phase
+    tolerance tol_res, because the phase there changes by radians per nanometre.
+
+    Returns a copy of lib with lib["convergence"] = {
+      M, M_check, sizes, d_phase (rad), d_amp, in_resonance (bool per size),
+      max_d_phase, max_d_amp (outside resonances), max_d_phase_resonance,
+      tol_phase, tol_amp, tol_res, passed }."""
+    s_all = np.asarray(lib["sizes"], float); t_all = np.asarray(lib["t"], complex)
+    if sizes is None:
+        sel = np.arange(len(s_all))
+    else:
+        want = np.round(np.asarray(sizes, float), 9)
+        sel = np.nonzero(np.isin(np.round(s_all, 9), want))[0]
+        if len(sel) != len(np.unique(want)):
+            raise ValueError("certify_library: sizes must be a subset of lib['sizes']")
+    s = s_all[sel]; t = t_all[sel]
+    M2 = int(lib["M"]) + int(dM)
+    hi = meta_atom_library(lib["lam0"], lib["L"], lib["H"], sizes=s, shape=lib["shape"],
+                           material=None, n_pillar=lib["n"], M=M2, n_sub=lib["n_sub"],
+                           n_bg=lib["n_bg"], raster_n=lib.get("raster_n"), use_cache=use_cache,
+                           n_jobs=n_jobs)["t"]
+    dphi = np.abs(np.angle(t * np.conj(hi)))
+    damp = np.abs(np.abs(t) - np.abs(hi))
+    inres = np.zeros(len(s), bool)
+    for r in lib.get("resonances", []):
+        inres |= (s >= r["lo"]) & (s <= r["hi"])
+    out_ok = ~inres
+    mx = lambda a, m: float(a[m].max()) if m.any() else 0.0          # noqa: E731
+    cert = {"M": int(lib["M"]), "M_check": M2, "sizes": s, "d_phase": dphi, "d_amp": damp,
+            "in_resonance": inres, "max_d_phase": mx(dphi, out_ok), "max_d_amp": mx(damp, out_ok),
+            "max_d_phase_resonance": mx(dphi, inres), "tol_phase": tol_phase, "tol_amp": tol_amp,
+            "tol_res": tol_res}
+    cert["passed"] = bool(cert["max_d_phase"] < tol_phase and cert["max_d_amp"] < tol_amp
+                          and cert["max_d_phase_resonance"] < tol_res)
+    out = dict(lib); out["convergence"] = cert
+    return out
+
 # --------------------------------------------------------------------------- targets
 def lens_phase(r, lam0, f):
     """Hyperbolic (aberration-free on axis) lens phase, physics convention, wrapped to [0, 2pi)."""

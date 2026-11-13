@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Performance — mirror-symmetry reduction of the 2D solver (roadmap N2)
+
+* `solve_rcwa_2d(..., symmetry="auto")` (default): at normal incidence, with a purely x- or
+  y-polarized source and layer rasters that are mirror-symmetric in x and y, the problem is
+  solved in the field-parity subspace ((Mx+1)(My+1) + Mx·My unknowns instead of
+  2(2Mx+1)(2My+1)); `rcwa/symmetry.py`. The conditions are checked numerically (raster, the
+  convolution matrices, the H-field subspace) and the full problem is used when any fails;
+  `res["symmetry"]` says which path ran. `symmetry=False` forces the full problem.
+* Same result as the full solve: largest difference in any order 1e-12 (tests cover x/y
+  polarization, substrate, absorbing pillar, a three-layer stack; fall-back for oblique
+  incidence, mixed polarization and an off-centre pillar).
+* Speed (TiO₂ circle, one layer, 2-core VM): M = 5: 4.8×, M = 7: 7.3×, M = 9: 10× (6.2 s →
+  0.62 s). The remaining time is mostly the (now small) eigenproblem.
+* The full path was also made cheaper without changing a bit of its output: diagonal KX/KY
+  products as scalings, and the Li matrices from one FFT per axis instead of one per line.
+
+### Accuracy — convergence certificate (roadmap N1)
+
+* `design.certify_library(lib, dM=2)`: re-solves every size at M + 2 and records the phase and
+  |t| change per size (`lib["convergence"]`); default limits 0.02 rad and 0.01 outside
+  resonance bands, 0.05 rad inside.
+* **Finding:** the default library (TiO₂, 633 nm, Λ = 350 nm, H = 600 nm, M = 7, refined to 59
+  sizes) does **not** pass: the largest pillar (300 nm, 50 nm gap to the neighbour) changes by
+  0.045 rad from M = 7 to M = 9; the resonance shoulders (218–222 nm) by 0.012–0.022 rad. Large
+  fill factors need more orders; with N2 that is now affordable.
+
 ### Performance — parallel library (roadmap N3)
 
 * `meta_atom_library(..., n_jobs=)` and `refine_library(..., n_jobs=)`; default from the

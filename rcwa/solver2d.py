@@ -8,12 +8,31 @@ and energy conservation.
 """
 import numpy as np
 from .convmat import convmat2d, convmat2d_li
-from .layer import homogeneous_modes, modes_from_ER, layer_smatrix, rayleigh_safe_scale
+from .layer import (homogeneous_modes, modes_from_ER, layer_smatrix, rayleigh_safe_scale,
+                    pq_matrices, modes_from_PQ)
 from .redheffer import redheffer_star
+from . import symmetry as sym
+from scipy import sparse
 
 
 def solve_rcwa_2d(lam0, theta_deg, phi_deg, er_ref, er_trn, Lx, Ly, layers, Mx, My, pol=(0., 1.),
-                  rule="li"):
+                  rule="li", symmetry="auto"):
+    """See _solve_full. symmetry="auto" (default) solves in the mirror-parity subspace when
+    the incidence is normal, the polarization purely x or y and every layer raster is
+    mirror-symmetric in x and y (rcwa/symmetry.py) - same result, much faster; anything else
+    uses the full problem. symmetry=False forces the full problem. The result dict carries
+    "symmetry": True/False."""
+    if symmetry:
+        r = _solve_sym(lam0, theta_deg, phi_deg, er_ref, er_trn, Lx, Ly, layers, Mx, My, pol, rule)
+        if r is not None:
+            return r
+    r = _solve_full(lam0, theta_deg, phi_deg, er_ref, er_trn, Lx, Ly, layers, Mx, My, pol, rule)
+    r["symmetry"] = False
+    return r
+
+
+def _solve_full(lam0, theta_deg, phi_deg, er_ref, er_trn, Lx, Ly, layers, Mx, My, pol=(0., 1.),
+                rule="li"):
     """Solve 2D RCWA.
 
     layers : [(eps2d, thickness), ...]  eps2d = (Nx, Ny) unit-cell sampling
@@ -102,3 +121,112 @@ def solve_rcwa_2d(lam0, theta_deg, phi_deg, er_ref, er_trn, Lx, Ly, layers, Mx, 
     return dict(Rtot=float(np.real(R.sum())), Ttot=float(np.real(T.sum())),
                 R=np.real(R), T=np.real(T), i0=i0, zeroth_index=i0,
                 tx=tx, ty=ty, rx=rx, ry=ry, orders=(MXf, MYf))
+
+
+def _solve_sym(lam0, theta_deg, phi_deg, er_ref, er_trn, Lx, Ly, layers, Mx, My, pol, rule):
+    """Mirror-parity reduced solve (see rcwa/symmetry.py). Returns None when the symmetry
+    conditions do not hold, so that the caller falls back to the full problem."""
+    p_tm, s_te = pol
+    if not np.isclose(theta_deg, 0.0):
+        return None
+    if (p_tm != 0) == (s_te != 0):                    # need purely x (TM) or purely y (TE)
+        return None
+    y_pol = s_te != 0
+    shapes_ = set()
+    for e, _ in layers:
+        e = np.asarray(e)
+        if e.ndim != 2 or not sym.raster_is_mirror_symmetric(e):
+            return None
+        if not np.all(e == e.flat[0]):
+            shapes_.add(e.shape)
+    if len(shapes_) > 1:                              # differently sampled patterned layers
+        return None
+    Nx, Ny = shapes_.pop() if shapes_ else (1, 1)
+
+    er_ref = np.conj(complex(er_ref)); er_trn = np.conj(complex(er_trn))
+    layers = [(np.conj(np.asarray(e, dtype=complex)), d) for e, d in layers]
+    k0 = 2 * np.pi / lam0
+    MX, MY = np.meshgrid(np.arange(-Mx, Mx + 1), np.arange(-My, My + 1), indexing='ij')
+    MXf, MYf = MX.flatten(), MY.flatten()
+    P = (2 * Mx + 1) * (2 * My + 1); Px, Py = 2 * Mx + 1, 2 * My + 1
+    kxv0 = -MXf * (lam0 / Lx) + 0.0; kyv0 = -MYf * (lam0 / Ly) + 0.0
+    s = rayleigh_safe_scale(kxv0, kyv0, (1.0, er_ref, er_trn))
+    KX = np.diag((s * kxv0).astype(complex)); KY = np.diag((s * kyv0).astype(complex))
+
+    UE = sym.e_basis(MXf, MYf, y_pol)
+    UH = None; D = None
+    layer_pq = []
+    for eps2d, d in layers:
+        if rule == "li":
+            ER, ERx, ERy = convmat2d_li(eps2d, Px, Py)
+        else:
+            ER = convmat2d(eps2d, Px, Py); ERx = ERy = None
+        if D is None and not np.all(eps2d == eps2d.flat[0]):
+            for sgn in (1, -1):                       # translate the mirror plane to the origin
+                Dt = sym.translation(MXf, MYf, Nx, Ny, sgn)
+                if sym.is_mirror_symmetric_matrix(Dt[:, None] * ER * np.conj(Dt)[None, :], MXf, MYf):
+                    D = Dt
+                    break
+            if D is None:
+                return None
+        if D is not None:
+            tr = lambda A: None if A is None else D[:, None] * A * np.conj(D)[None, :]  # noqa: E731
+            ER, ERx, ERy = tr(ER), tr(ERx), tr(ERy)
+        Pm, Qm = pq_matrices(ER, KX, KY, ERx, ERy)
+        if UH is None:
+            UH = sym.h_basis(Qm, UE, MXf, MYf)
+            if UH is None:
+                return None
+            UEs = sparse.csr_array(UE); UHs = sparse.csr_array(UH)
+        layer_pq.append((UEs.T @ (UHs.T @ Pm.T).T, UHs.T @ (UEs.T @ Qm.T).T, d))
+    if UH is None:                                    # no layers: use the gap Q
+        _, Vtmp, _ = homogeneous_modes(KX, KY, 1.0, 1.0)
+        UH = sym.h_basis(Vtmp, UE, MXf, MYf)
+        if UH is None:
+            return None
+        UEs = sparse.csr_array(UE); UHs = sparse.csr_array(UH)
+    if D is None:
+        D = np.ones(P, complex)
+
+    red = lambda V: UHs.T @ (UEs.T @ V.T).T           # noqa: E731  UH^T V UE (sparse U)
+    _, Vg, _ = homogeneous_modes(KX, KY, 1.0, 1.0)
+    r = UE.shape[1]
+    Wg = np.eye(r, dtype=complex); Vg = red(Vg); Vgi = np.linalg.inv(Vg)
+    Z = np.zeros((r, r), complex); Ir = np.eye(r, dtype=complex)
+    Sg = None
+    for Pr, Qr, d in layer_pq:
+        W, V, lam = modes_from_PQ(Pr, Qr)
+        Sl = layer_smatrix(W, V, lam, k0, d, Wg, Vg)
+        Sg = Sl if Sg is None else redheffer_star(Sg, Sl)
+    if Sg is None:
+        Sg = (Z.copy(), Ir.copy(), Ir.copy(), Z.copy())
+
+    _, Vref, KZref = homogeneous_modes(KX, KY, er_ref, 1.0)
+    Aref = Ir + Vgi @ red(Vref); Bref = Ir - Vgi @ red(Vref)
+    Ai = np.linalg.inv(Aref)
+    Sref = (-Ai @ Bref, 2 * Ai, 0.5 * (Aref - Bref @ Ai @ Bref), Bref @ Ai)
+    _, Vtrn, KZtrn = homogeneous_modes(KX, KY, er_trn, 1.0)
+    Atrn = Ir + Vgi @ red(Vtrn); Btrn = Ir - Vgi @ red(Vtrn)
+    Ti = np.linalg.inv(Atrn)
+    Strn = (Btrn @ Ti, 0.5 * (Atrn - Btrn @ Ti @ Btrn), 2 * Ti, -Ti @ Btrn)
+    S11, S12, S21, S22 = redheffer_star(redheffer_star(Sref, Sg), Strn)
+
+    i0 = int(np.where((MXf == 0) & (MYf == 0))[0][0])
+    esrc = np.zeros(2 * P, complex)
+    if y_pol:
+        esrc[P + i0] = s_te                            # ate = y at normal incidence
+    else:
+        esrc[i0] = p_tm                                # atm = x at normal incidence
+    csrc = UE.T @ esrc
+    D2 = np.concatenate([D, D])
+    rt = np.conj(D2) * (UE @ (S11 @ csrc)); tt = np.conj(D2) * (UE @ (S21 @ csrc))
+    rx, ry = rt[:P], rt[P:]; tx, ty = tt[:P], tt[P:]
+    kxv, kyv = np.diag(KX), np.diag(KY)
+    rz = -(kxv * rx + kyv * ry) / np.diag(KZref)
+    tz = -(kxv * tx + kyv * ty) / np.diag(KZtrn)
+    kz_inc = np.sqrt(er_ref)
+    R = (np.abs(rx) ** 2 + np.abs(ry) ** 2 + np.abs(rz) ** 2) * np.real(np.diag(KZref) / kz_inc)
+    T = (np.abs(tx) ** 2 + np.abs(ty) ** 2 + np.abs(tz) ** 2) * np.real(np.diag(KZtrn) / kz_inc)
+    return dict(Rtot=float(np.real(R.sum())), Ttot=float(np.real(T.sum())),
+                R=np.real(R), T=np.real(T), i0=i0, zeroth_index=i0,
+                tx=tx, ty=ty, rx=rx, ry=ry, orders=(MXf, MYf), symmetry=True)

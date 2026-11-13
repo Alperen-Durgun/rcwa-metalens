@@ -71,13 +71,18 @@ def convmat2d_li(eps, Px, Py):
     inv_eps = 1.0 / eps
     ix = np.arange(Px); iy = np.arange(Py)
     dmx = ix[:, None] - ix[None, :]; dmy = iy[:, None] - iy[None, :]
+    if Nx < 2 * Px - 1 or Ny < 2 * Py - 1:
+        raise ValueError(f"eps grid {Nx}x{Ny} is too coarse for {Px}x{Py} orders")
     # ERx: for every y-line, the 1D inverse-rule matrix along x; then Fourier transform along y
-    Ax = np.linalg.inv(np.stack([convmat1d(inv_eps[:, j], Px) for j in range(Ny)]))     # (Ny,Px,Px)
+    # (all lines at once: one FFT along x, then the Toeplitz gather; same values as convmat1d)
+    Lx = np.fft.fftshift(np.fft.fft(inv_eps, axis=0), axes=0) / Nx                     # (Nx,Ny)
+    Ax = np.linalg.inv(Lx[Nx // 2 + dmx].transpose(2, 0, 1))                             # (Ny,Px,Px)
     Fx = np.fft.fftshift(np.fft.fft(Ax, axis=0), axes=0) / Ny
     Gx = Fx[Ny // 2 + dmy]                                    # [n,n',m,m']
     ERx = Gx.transpose(2, 0, 3, 1).reshape(Px * Py, Px * Py)  # index (m,n),(m',n'), x-outer
     # ERy: for every x-line, the 1D inverse-rule matrix along y; then Fourier transform along x
-    Ay = np.linalg.inv(np.stack([convmat1d(inv_eps[i, :], Py) for i in range(Nx)]))     # (Nx,Py,Py)
+    Ly = np.fft.fftshift(np.fft.fft(inv_eps, axis=1), axes=1) / Ny                     # (Nx,Ny)
+    Ay = np.linalg.inv(Ly[:, Ny // 2 + dmy])                                             # (Nx,Py,Py)
     Fy = np.fft.fftshift(np.fft.fft(Ay, axis=0), axes=0) / Nx
     Gy = Fy[Nx // 2 + dmx]                                    # [m,m',n,n']
     ERy = Gy.transpose(0, 2, 1, 3).reshape(Px * Py, Px * Py)

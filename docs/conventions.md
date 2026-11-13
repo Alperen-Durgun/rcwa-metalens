@@ -107,6 +107,12 @@ referenced to the plane of the actual maximum.
 * **Orders (1D super-cell).** A super-cell of width D with index n needs about
   `M ≳ 1.5·n·D/λ`. Energy conservation (ΣDE ≈ 1) is necessary but not sufficient: an
   under-resolved solve can conserve energy and still put the focus in the wrong place.
+* **Certificate.** `design.certify_library` re-solves at M + 2 and reports the phase change
+  per size. Pillars that nearly touch their neighbours (gap ≲ 60 nm at Λ = 350 nm) converge
+  slowest; the default TiO₂ library fails the 0.02 rad limit at M = 7 only there.
+* **Symmetry.** Normal incidence + pure x/y polarization + a mirror-symmetric cell is solved
+  in the parity subspace automatically (`res["symmetry"]`); identical results, 7–10× faster
+  at M = 7–9.
 * **Raster.** A binary pixel mask quantizes the pillar size to `L/N`. The designers use
   `shapes.DEFAULT_N = 512` samples per period (0.7 nm at L = 0.35 µm). The solver cost does
   not depend on N. Coarse grids produce stair-stepped phase-versus-size curves.

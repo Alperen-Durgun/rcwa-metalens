@@ -741,6 +741,62 @@ def test_parallel_library_matches_serial():
     assert np.allclose(a, b, rtol=0, atol=1e-9)
     assert dz.resolve_jobs(3) == 3 and dz.resolve_jobs(0) >= 1
 
+
+def test_certify_library_convergence():
+    """N1: an index-matched pillar (no contrast) is exactly converged at any M; a real TiO2
+    pillar at M=2 is not, and the certificate says so; subsets and resonance bands work."""
+    from rcwa import design as dz
+    flat = dz.meta_atom_library(0.633, 0.35, 0.60, sizes=[0.1, 0.2], n_pillar=1.0, M=2, use_cache=False)
+    c0 = dz.certify_library(flat, use_cache=False)["convergence"]
+    assert c0["passed"] and c0["max_d_phase"] < 1e-9 and c0["M_check"] == 4
+    lib = dz.meta_atom_library(0.633, 0.35, 0.60, sizes=[0.12, 0.20, 0.27], material="TiO2_t",
+                               M=2, use_cache=False)
+    c = dz.certify_library(lib, tol_phase=1e-4, use_cache=False)["convergence"]
+    assert not c["passed"] and c["max_d_phase"] > 1e-4 and len(c["d_phase"]) == 3
+    lib["resonances"] = [{"lo": 0.19, "hi": 0.21}]
+    c2 = dz.certify_library(lib, sizes=[0.20], tol_phase=1.0, tol_amp=1.0, tol_res=1e-6,
+                            use_cache=False)["convergence"]
+    assert c2["in_resonance"].tolist() == [True] and not c2["passed"]
+    try:
+        dz.certify_library(lib, sizes=[0.15])
+        raise AssertionError("a size outside the library must be rejected")
+    except ValueError:
+        pass
+
+
+def test_symmetry_reduction_matches_full():
+    """N2: the mirror-parity reduced solve gives the full solve's amplitudes in every order
+    (x and y polarization, substrate, absorbing pillar, a stack with a uniform spacer)."""
+    from rcwa import shapes
+    from rcwa.solver2d import solve_rcwa_2d
+    N = 128
+    cases = [("circle", 0.20, 3, (0., 1.), 1.0, False), ("circle", 0.20, 3, (1., 0.), 1.46, False),
+             ("square", 0.25, 4, (0., 1.), 1.46, False), ("circle", 0.22, 3, (0., 1.), 1.0, True)]
+    for shape, size, M, pol, n_sub, stack in cases:
+        eps = shapes.rasterize(shape, size, 0.35, N, n_pillar=complex(2.5, 0.02))
+        lay = [(eps, 0.6)] if not stack else [(eps, 0.3), (np.full((N, N), 1.45 ** 2 + 0j), 0.1),
+                                              (shapes.rasterize(shape, 0.8 * size, 0.35, N, n_pillar=2.5), 0.25)]
+        a = solve_rcwa_2d(0.633, 0, 0, n_sub ** 2, 1.0, 0.35, 0.35, lay, M, M, pol=pol, symmetry=False)
+        b = solve_rcwa_2d(0.633, 0, 0, n_sub ** 2, 1.0, 0.35, 0.35, lay, M, M, pol=pol)
+        assert b["symmetry"] and not a["symmetry"]
+        for k in ("tx", "ty", "rx", "ry"):
+            assert np.abs(a[k] - b[k]).max() < 1e-10, (shape, k)
+        assert abs(a["Ttot"] - b["Ttot"]) < 1e-12 and 0.5 < b["Rtot"] + b["Ttot"] <= 1 + 1e-9      # absorbing pillar
+
+
+def test_symmetry_falls_back_when_not_applicable():
+    """N2: oblique incidence, mixed polarization or an asymmetric cell use the full solve."""
+    from rcwa import shapes
+    from rcwa.solver2d import solve_rcwa_2d
+    eps = shapes.rasterize("circle", 0.2, 0.35, 128, n_pillar=2.5)
+    off = np.roll(eps, 5, axis=0)                                 # pillar off the cell centre
+    kw = dict(Mx=3, My=3)
+    assert not solve_rcwa_2d(0.633, 10, 0, 1, 1, 0.35, 0.35, [(eps, 0.6)], pol=(0., 1.), **kw)["symmetry"]
+    assert not solve_rcwa_2d(0.633, 0, 0, 1, 1, 0.35, 0.35, [(eps, 0.6)], pol=(0.6, 0.8), **kw)["symmetry"]
+    r = solve_rcwa_2d(0.633, 0, 0, 1, 1, 0.35, 0.35, [(off, 0.6)], pol=(0., 1.), **kw)
+    f = solve_rcwa_2d(0.633, 0, 0, 1, 1, 0.35, 0.35, [(off, 0.6)], pol=(0., 1.), symmetry=False, **kw)
+    assert not r["symmetry"] and np.array_equal(r["ty"], f["ty"])
+
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio
     utf8_stdio()
