@@ -26,7 +26,8 @@
   aperture, NA 0.45. Corrected focal analysis vs Tidy3D:
   - D 6 / f 6 um: focus 5.167 vs 5.006 um at 15 steps/wavelength (-3.1 %), 5.060 um at 25 steps
     (-2.1 %, passes 3 %); a second-order extrapolation gives ~5.09 um (~-1.5 %).
-  - D 10 / f 10 um (15 steps only; 25 steps would cost ~6 FC): focus 9.382 vs 9.094 um (-3.1 %).
+  - D 10 / f 10 um (15 steps only; 25 steps would cost ~6 FC): focus 9.382 vs 9.094 um (-3.1 %,
+    misses 3 % by 0.1 point; at 15 steps D 6 also gave -3.1 % and improved to -2.1 % at 25).
   - FWHM in the FDTD monitor plane: 654 vs 637 / 631 nm (D 6, 15 / 25 steps), 704 vs 693 nm
     (D 10); relative efficiency 0.928 vs 0.905 (D 6), 0.929 vs 0.902 (D 10).
   The earlier report of this entry (focus -5.2 / -6.6 %, "unresolved sub-cell content") was
@@ -35,7 +36,11 @@
   FDTD grid error at 15 steps). The per-cell field in FDTD matches the library within 0.15 rad
   rms (rim -0.12 rad, -17 % amplitude); light outside the cells carries 4.8 % of the power.
 * The example now compares FWHM and efficiency in the FDTD monitor plane and computes its
-  near-field diagnostics with the Rayleigh-Sommerfeld sum (not yet re-run on the saved data).
+  near-field diagnostics with the Rayleigh-Sommerfeld sum. Re-run on the saved data: the FDTD
+  near field propagated gives 5.103 / 9.270 um (direct FDTD 5.060 / 9.094); the propagating
+  FDTD field averaged per cell, through the LPA propagator, gives 5.043 / 9.192 um. So with
+  the per-cell values taken from FDTD the LPA reproduces the FDTD focus; the remaining ~2 %
+  comes from the per-cell values (neighbour coupling, phase rms 0.15-0.17 rad).
 * Cost (estimates): 2 x 0.258 + 0.896 + ~1.8 FC.
 
 ### Changed defaults — the lens generators use the validated recipe

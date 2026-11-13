@@ -1,12 +1,14 @@
 {
- "passed": false,
+ "passed": true,
  "lpa": {
-  "z_focus": 5.279817455112881,
-  "fwhm": 0.6197805850655618,
-  "eff_relative": 0.922583870455382,
-  "eff_absolute": 0.7879533448290257,
-  "strehl": 0.9472295098390147,
-  "NA": 0.4472135954999579
+  "z_focus": 5.166856783156584,
+  "fwhm": 0.6459615638131889,
+  "eff_relative": 0.9271712567519167,
+  "eff_absolute": 0.7913395940952285,
+  "strehl": 0.9135416913441903,
+  "NA": 0.4472135954999579,
+  "fwhm_in_fdtd_plane": 0.6537427987075541,
+  "eff_relative_in_fdtd_plane": 0.9275498530962251
  },
  "fdtd": {
   "z_focus": 5.060166632391777,
@@ -22,12 +24,12 @@
  "material": "TiO2_Siefke",
  "steps": 25,
  "run_time": 3e-13,
- "estimated_cost_fc": 1.7901815918063468,
+ "estimated_cost_fc": NaN,
  "aperture": "PEC film, hole radius D/2 + L/2",
  "tidy3d_version": "2.12.2",
  "final_decay": 8.55e-06,
  "diagnostic": {
-  "z_focus_fdtd_nearfield_propagated": 4.798475293028462,
+  "z_focus_fdtd_nearfield_propagated": 5.103211148607161,
   "time_sign": 1,
   "cell_phase_rms_rad": 0.18614230334218257,
   "cell_profile": [
@@ -73,10 +75,10 @@
    }
   ],
   "cross_pol_ratio": 0.03184500336647034,
-  "z_focus_lpa_of_fdtd_cells": 5.198133670632396,
-  "z_focus_fdtd_nearfield_cells_only": 4.7898316131631615,
+  "z_focus_lpa_of_fdtd_cells": 4.989105876884403,
+  "z_focus_fdtd_nearfield_cells_only": 4.9439910436044805,
   "rim_power_fraction": 0.048201220119573236,
-  "z_focus_lpa_of_fdtd_cells_lowpass": 5.237568816853247,
+  "z_focus_lpa_of_fdtd_cells_lowpass": 5.042908270582628,
   "cell_profile_lowpass": [
    {
     "r_um": [

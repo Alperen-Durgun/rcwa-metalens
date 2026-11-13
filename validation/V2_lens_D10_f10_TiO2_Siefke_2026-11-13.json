@@ -1,12 +1,14 @@
 {
  "passed": false,
  "lpa": {
-  "z_focus": 9.740648108801407,
-  "fwhm": 0.6711956465355078,
-  "eff_relative": 0.9261946844492193,
-  "eff_absolute": 0.7918162403708192,
-  "strehl": 0.9860957184455101,
-  "NA": 0.45166896129293815
+  "z_focus": 9.382352916102558,
+  "fwhm": 0.6863037762562841,
+  "eff_relative": 0.9268147049705453,
+  "eff_absolute": 0.7924230346934779,
+  "strehl": 0.9557086917336236,
+  "NA": 0.45166896129293815,
+  "fwhm_in_fdtd_plane": 0.7038905990376481,
+  "eff_relative_in_fdtd_plane": 0.9288049451670158
  },
  "fdtd": {
   "z_focus": 9.094133317204047,
@@ -27,7 +29,7 @@
  "tidy3d_version": "2.12.2",
  "final_decay": 8.81e-06,
  "diagnostic": {
-  "z_focus_fdtd_nearfield_propagated": 9.087353059319385,
+  "z_focus_fdtd_nearfield_propagated": 9.270202275369362,
   "time_sign": 1,
   "cell_phase_rms_rad": 0.15253663882629462,
   "cell_profile": [
@@ -73,10 +75,10 @@
    }
   ],
   "cross_pol_ratio": 0.03808731958270073,
-  "z_focus_lpa_of_fdtd_cells": 9.675134969658824,
-  "z_focus_fdtd_nearfield_cells_only": 9.05435035842537,
+  "z_focus_lpa_of_fdtd_cells": 9.138533144354032,
+  "z_focus_fdtd_nearfield_cells_only": 9.137501564705218,
   "rim_power_fraction": 0.04758043983061594,
-  "z_focus_lpa_of_fdtd_cells_lowpass": 9.684204072857074,
+  "z_focus_lpa_of_fdtd_cells_lowpass": 9.192206226778062,
   "cell_profile_lowpass": [
    {
     "r_um": [
