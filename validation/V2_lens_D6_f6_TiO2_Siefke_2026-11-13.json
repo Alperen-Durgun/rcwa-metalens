@@ -1,0 +1,129 @@
+{
+ "passed": false,
+ "lpa": {
+  "z_focus": 5.279817455112881,
+  "fwhm": 0.6197805850655618,
+  "eff_relative": 0.922583870455382,
+  "eff_absolute": 0.7879533448290257,
+  "strehl": 0.9472295098390147,
+  "NA": 0.4472135954999579
+ },
+ "fdtd": {
+  "z_focus": 5.005760536146643,
+  "fwhm": 0.6369555885729417,
+  "eff_relative": 0.9059918389538213,
+  "xy_plane_z": 5.279817455112881
+ },
+ "D": 6.0,
+ "f": 6.0,
+ "L": 0.375,
+ "H": 0.6,
+ "n_sub": 1.4570121246412515,
+ "material": "TiO2_Siefke",
+ "steps": 15,
+ "run_time": 3e-13,
+ "estimated_cost_fc": NaN,
+ "aperture": "PEC film, hole radius D/2 + L/2",
+ "tidy3d_version": "2.12.2",
+ "final_decay": 6.12e-06,
+ "diagnostic": {
+  "z_focus_fdtd_nearfield_propagated": 4.95833430423796,
+  "time_sign": 1,
+  "cell_phase_rms_rad": 0.19545492041452794,
+  "cell_profile": [
+   {
+    "r_um": [
+     0.0,
+     0.675
+    ],
+    "rms_phase_err_rad": 0.16873842343275558,
+    "mean_amp_ratio": 2.7130908435211905
+   },
+   {
+    "r_um": [
+     0.675,
+     1.35
+    ],
+    "rms_phase_err_rad": 0.1333591294798233,
+    "mean_amp_ratio": 2.4820612206395416
+   },
+   {
+    "r_um": [
+     1.35,
+     2.0250000000000004
+    ],
+    "rms_phase_err_rad": 0.12573439097175929,
+    "mean_amp_ratio": 2.330072028057684
+   },
+   {
+    "r_um": [
+     2.0250000000000004,
+     2.7
+    ],
+    "rms_phase_err_rad": 0.1377020548492317,
+    "mean_amp_ratio": 2.5326607118312294
+   },
+   {
+    "r_um": [
+     2.7,
+     3.375
+    ],
+    "rms_phase_err_rad": 0.3336663482501615,
+    "mean_amp_ratio": 1.808512522946469
+   }
+  ],
+  "cross_pol_ratio": 0.03170986473560333,
+  "z_focus_lpa_of_fdtd_cells": 5.196402613231498,
+  "z_focus_fdtd_nearfield_cells_only": 4.92415674209359,
+  "rim_power_fraction": 0.047526954269509376,
+  "z_focus_lpa_of_fdtd_cells_lowpass": 5.239410504161843,
+  "cell_profile_lowpass": [
+   {
+    "r_um": [
+     0.0,
+     0.675
+    ],
+    "mean_phase_err_rad": 0.12273833311697041,
+    "rms_phase_err_rad": 0.12297646798684986,
+    "rel_amp": 1.1342768364423865
+   },
+   {
+    "r_um": [
+     0.675,
+     1.35
+    ],
+    "mean_phase_err_rad": -0.0486869201426289,
+    "rms_phase_err_rad": 0.13344557015791694,
+    "rel_amp": 1.0345554248305664
+   },
+   {
+    "r_um": [
+     1.35,
+     2.0250000000000004
+    ],
+    "mean_phase_err_rad": 0.02045378957881504,
+    "rms_phase_err_rad": 0.1607614617994331,
+    "rel_amp": 0.9483725580769725
+   },
+   {
+    "r_um": [
+     2.0250000000000004,
+     2.7
+    ],
+    "mean_phase_err_rad": 0.0701796513971874,
+    "rms_phase_err_rad": 0.1273395513224836,
+    "rel_amp": 1.052185776042469
+   },
+   {
+    "r_um": [
+     2.7,
+     3.375
+    ],
+    "mean_phase_err_rad": -0.23347799041860604,
+    "rms_phase_err_rad": 0.2697771157719884,
+    "rel_amp": 0.8031042690132058
+   }
+  ],
+  "cell_phase_rms_lowpass_rad": 0.17435521873564994
+ }
+}

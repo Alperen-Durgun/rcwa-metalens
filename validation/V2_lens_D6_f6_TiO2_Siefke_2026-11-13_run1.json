@@ -1,0 +1,29 @@
+{
+ "passed": false,
+ "lpa": {
+  "z_focus": 5.279817455112881,
+  "fwhm": 0.6197805850655618,
+  "eff_relative": 0.922583870455382,
+  "eff_absolute": 0.7879533448290257,
+  "strehl": 0.9472295098390147,
+  "NA": 0.4472135954999579
+ },
+ "fdtd": {
+  "z_focus": 5.005777091873555,
+  "fwhm": 0.6369556782638297,
+  "eff_relative": 0.9059918403636498,
+  "xy_plane_z": 5.279817455112881
+ },
+ "D": 6.0,
+ "f": 6.0,
+ "L": 0.375,
+ "H": 0.6,
+ "n_sub": 1.4570121246412515,
+ "material": "TiO2_Siefke",
+ "steps": 15,
+ "run_time": 3e-13,
+ "estimated_cost_fc": 0.25816493325521284,
+ "aperture": "PEC film, hole radius D/2 + L/2",
+ "tidy3d_version": "2.12.2",
+ "final_decay": 6.12e-06
+}

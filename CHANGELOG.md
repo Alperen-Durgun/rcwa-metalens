@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### V2 lens validation (3D FDTD) - focus criterion not met
+
+* V2 (3D lens, LPA vs Tidy3D FDTD, `examples/20_lens_fdtd_aperture.py`): D = 6 um, f = 6 um, NA 0.45,
+  TiO2_Siefke 600/375 on silica, PEC aperture. FWHM 620 vs 637 nm (+2.8 %, passes 5 %), relative
+  efficiency 0.923 vs 0.906; focus 5.280 vs 5.006 um (-5.2 %, FAILS the 3 % criterion). Diagnostics from
+  a near-field monitor: the FDTD near field propagated with the angular-spectrum method reproduces the
+  FDTD focus (4.958 um), so the propagator is not the cause; the propagating part of the FDTD field
+  averaged per cell agrees with the library (phase rms 0.17 rad, rim -0.23 rad / -20 % amplitude) and
+  gives 5.239 um through the LPA propagator, so neighbour coupling explains < 1 %; open rim outside the
+  cells carries 4.8 % of the power and is not the cause; band-limited instead of cell-constant
+  reconstruction moves the focus the wrong way (5.425 um). The remaining ~4.5 % is sub-cell field content
+  not represented by one value per cell - unresolved. Both models show the low-Fresnel-number focal shift
+  (N_F = 2.4, focus at ~0.85 f). Cost 2 x 0.258 FC (estimate).
+
 ### Changed defaults — the lens generators use the validated recipe
 
 * `metalens_design_full`, `fov_analysis`, `index_robustness`, `lens_tolerance` and
