@@ -1,0 +1,28 @@
+# Sourced optical constants
+
+All files in this folder are unchanged copies from the **refractiveindex.info database**
+(https://github.com/polyanskiy/refractiveindex.info-database, branch `main`, downloaded
+2026-11-13). The database is in the public domain: copyright and related rights were
+waived through the CC0 1.0 Universal Public Domain Dedication.
+
+Each dataset is registered under the name in the first column (`rcwa.materials.SOURCED`);
+`materials.info(name)` returns the reference. The data refuse to extrapolate outside the
+range given. Please cite the original publication when you use a dataset.
+
+| Name | File | Range (µm) | Sample | Reference | DOI |
+|---|---|---|---|---|---|
+| `TiO2_Siefke` | TiO2_Siefke.yml | 0.12–125.1 | Film: prepared by ALD, 350 nm TiO2. See Ratzsch et al. Nanotechnology 26, 024003 (2015). Measurement: ellip... | T. Siefke, S. Kroker, K. Pfeiffer, O. Puffky, K. Dietrich, D. Franta, I. Ohlídal, A. Szeghalmi, E.-B. Kley, A. Tünnermann. Materials pushing the application limits of ... | https://doi.org/10.1002/adom.201600250 |
+| `TiO2_Jolivet_amorphous` | TiO2_Jolivet-amorphous.yml | 0.207–0.8266 | TiO2 amorphous thin film deposited by ALD at 200 °C | A. Jolivet, C. Labbé, C. Frilay, O. Debieu, P. Marie, B. Horcholle, F. Lemarié, X. Portier, C. Grygiel, S. Duprey, W. Jadwisienczak, D. Ingram, M. Upadhyay, A. David, ... | https://doi.org/10.1016/j.apsusc.2022.155214 |
+| `TiO2_Sarkar` | TiO2_Sarkar.yml | 0.3–1.69 | Titanium(IV) oxide (Titanium dioxide, TiO2) thin film (thickness 200 nm) on glass substrate. Note: n(633 nm) = 2.13, well below the ALD films (2.39–2.41). | S. Sarkar, V. Gupta, M. Kumar, J. Schubert, P.T. Probst, J. Joseph, T.A.F. König. Hybridized guided-mode resonances via colloidal plasmonic self-assembled grating. ACS... | https://doi.org/10.1021/acsami.8b20535 |
+| `TiO2_Devore_o` | TiO2_Devore-o.yml | 0.43–1.53 | Ordinary ray (o); Room temperature. | J. R. Devore. Refractive indices of rutile and sphalerite. J. Opt. Soc. Am. 41, 416-419 (1951) | https://doi.org/10.1364/JOSA.41.000416 |
+| `Si3N4_Luke` | Si3N4_Luke.yml | 0.31–5.504 | 340 nm Si3N4 on 3.1 μm of thermal SiO2 on silicon. | K. Luke, Y. Okawachi, M. R. E. Lamont, A. L. Gaeta, M. Lipson. Broadband mid-infrared frequency comb generation in a Si3N4 microresonator. Opt. Lett. 40, 4823-4826 (20... | https://doi.org/10.1364/OL.40.004823 |
+| `Si3N4_Philipp` | Si3N4_Philipp.yml | 0.207–1.24 |  | 1) H. R. Philipp. Optical properties of silicon nitride. J. Electrochim. Soc. 120, 295-300 (1973) 2) T. Bååk. Silicon oxynitride; a material for GRIN optics. Appl. Opt... | https://doi.org/10.1149/1.2403440 |
+| `SiO2_Malitson` | SiO2_Malitson.yml | 0.21–6.7 | Fused silica, 20 °C | 1) I. H. Malitson. Interspecimen comparison of the refractive index of fused silica. J. Opt. Soc. Am. 55, 1205-1208 (1965) 2) C. Z. Tan. Determination of refractive in... | https://doi.org/10.1364/JOSA.55.001205 |
+| `Al2O3_Malitson_o` | Al2O3_Malitson.yml | 0.265–5.577 | Synthetic sapphire, Ordinary ray (o), 24 °C | I. H. Malitson. Refraction and dispersion of synthetic sapphire. J. Opt. Soc. Am. 52, 1377-1379 (1962) | https://doi.org/10.1364/JOSA.52.001377 |
+| `Al2O3_Boidin` | Al2O3_Boidin.yml | 0.3–18 | Thin films of amorphous alumina were fabricated using pulsed laser deposition in vacuum.Influence of deposi... | R. Boidin, T. Halenkovič, V. Nazabal, L. Beneš, P. Němec. Pulsed laser deposited alumina thin films. Ceramics International 42, 1177-1182 (2016) (Numerical data kindly... | https://doi.org/10.1016/j.ceramint.2015.09.048 |
+| `Al2O3_Kischkat` | Al2O3_Kischkat.yml | 1.54–14.29 | 497-nm single layer on Si substrate. Prepared by room temperature reactive sputter deposition using Al targ... | J. Kischkat, S. Peters, B. Gruska, M. Semtsiv, M. Chashnikova, M. Klinkmüller, O. Fedosenko, S. Machulik, A. Aleksandrova, G. Monastyrskyi, Y. Flores, W. T. Masselink.... | https://doi.org/10.1364/AO.51.006789 |
+| `GaN_Kawashima_o` | GaN_Kawashima.yml | 0.124–0.9919 | Single-crystalline hexagonal GaN (α-GaN) film on (0001) sapphire substrate. Ordinary ray (o, E⊥c). Room tem... ⚠ k ≈ 0.06 at 633 nm, below the band gap: treat k with care. | 1) T. Kawashima, H. Yoshikawa, S. Adachi. Optical properties of hexagonal GaN. J. Appl. Phys. 82, 3528-3535 (1997) 2) S. Logothetidis, J. Petalas, M. Cardona, T. D. Mo... | https://doi.org/10.1063/1.365671 |
+| `GaN_Barker_o` | GaN_Barker-o.yml | 0.35–10 | α-GaN (wurtzite); Ordinary ray (o); 300 K (27 °C). | A. S. Barker Jr. and M. Ilegems. Infrared lattice vibrations and free-electron dispersion in GaN. Phys. Rev. B 7, 743-750 (1973) | https://doi.org/10.1103/PhysRevB.7.743 |
+| `aSi_Pierce` | Si_Pierce.yml | 0.103–2.066 | Amorphous silicon (α-Si or a-Si). 60-nm film. ⚠ only 46 points; a-Si depends strongly on deposition. | 1) D. T. Pierce and W. E. Spicer. Electronic structure of amorphous Si from photoemission and optical studies. Phys. Rev. B 5, 3017-3029 (1972) 2) Handbook of Optical ... | https://doi.org/10.1103/PhysRevB.5.3017 |
+| `Si_Green2008` | Si_Green-2008.yml | 0.25–1.45 | Combination of data sets enforcing KK consistency. 300 K (27 °C). k is for band-to-band absorption. | M. A. Green. Self-consistent optical parameters of intrinsic silicon at 300K including temperature coefficients. Sol. Energ. Mat. Sol. Cells 92, 1305–1310 (2008) | https://doi.org/10.1016/j.solmat.2008.06.009 |
+| `Si_Schinke` | Si_Schinke.yml | 0.25–1.45 | Relative uncertainties of the absorption coefficient: 0.4% at 0.250 µm, 11% at 0.6 µm, 1.4% at 1 µm, 12% at... | 1) C. Schinke, P. C. Peest, J. Schmidt, R. Brendel, K. Bothe, M. R. Vogt, I. Kröger, S. Winter, A. Schirmacher, S. Lim, H. T. Nguyen, D. MacDonald. Uncertainty analysi... | https://doi.org/10.1063%2F1.4923379 |

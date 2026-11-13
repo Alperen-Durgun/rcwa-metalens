@@ -814,6 +814,45 @@ def test_design_lens_uses_only_certified_sizes():
     d = dz.design_lens(0.633, 0.35, 0.60, 4.0, 6.0, lib=cl, certify=True, refine=False, mode="complex")
     assert ok[d["idx"][d["inside"]]].all()
 
+
+def test_sourced_materials_match_independent_formulas():
+    """M1: shipped refractiveindex.info files reproduce independent closed forms - Malitson
+    (fused silica, n_d = 1.4585 at 587.6 nm) and Devore's rutile formula (refractiveindex.info
+    formula 4); every shipped dataset loads, carries a reference and refuses extrapolation."""
+    from rcwa import materials as m
+    lam = np.linspace(0.45, 1.5, 40)
+    assert np.abs(m.MATERIALS["SiO2_Malitson"](lam) - m.n_SiO2(lam)).max() < 1e-12
+    assert abs(m.MATERIALS["SiO2_Malitson"](0.5876).real - 1.4585) < 2e-4
+    assert np.abs(m.MATERIALS["TiO2_Devore_o"](lam) - np.sqrt(5.913 + 0.2441 / (lam ** 2 - 0.0803))).max() < 1e-12
+    for name in m.SOURCED:
+        i = m.info(name)
+        assert i["references"] and "CC0" in i["license"] and i["range_um"][0] < i["range_um"][1]
+    try:
+        m.eps_of("TiO2_Jolivet_amorphous", 1.0)
+        raise AssertionError("must refuse to extrapolate")
+    except ValueError:
+        pass
+
+
+def test_rii_formulas_and_block_merging(tmp_path):
+    """M1: formulas 2, 3, 5 against hand evaluation; a formula n block and a tabulated k block
+    are merged and the valid range is their intersection."""
+    from rcwa import materials as m
+    lam = 0.7
+    assert abs(m.rii_formula(lam, 2, [0.1, 1.2, 0.01]) - np.sqrt(1 + 0.1 + 1.2 * lam ** 2 / (lam ** 2 - 0.01))) < 1e-14
+    assert abs(m.rii_formula(lam, 3, [2.0, 0.05, -2]) - np.sqrt(2.0 + 0.05 * lam ** -2)) < 1e-14
+    assert abs(m.rii_formula(lam, 5, [1.5, 0.004, -2]) - (1.5 + 0.004 * lam ** -2)) < 1e-14
+    f = tmp_path / "x.yml"
+    f.write_text("REFERENCES: |\n  A. Author. <a href=\"https://doi.org/10/x\">J. Test</a>\nDATA:\n"
+                 "  - type: formula 5\n    wavelength_range: 0.4 1.0\n    coefficients: 2.0 0.01 -2\n"
+                 "  - type: tabulated k\n    data: |\n      0.5 0.10\n      1.2 0.30\n", encoding="utf-8")
+    rec = m.load_rii(str(f))
+    assert rec["range_um"] == (0.5, 1.0) and "Author" in rec["references"] and "<" not in rec["references"]
+    v = rec["fn"](0.85)
+    assert abs(v.real - (2.0 + 0.01 / 0.85 ** 2)) < 1e-14 and abs(v.imag - 0.2) < 1e-12
+    m.register_rii("TEST_merged", str(f))
+    assert abs(m.eps_of("TEST_merged", 0.85) - v ** 2) < 1e-14
+
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio
     utf8_stdio()

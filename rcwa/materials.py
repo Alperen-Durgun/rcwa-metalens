@@ -162,37 +162,6 @@ def sellmeier_formula(lam, coeffs, formula=1):
     return np.sqrt(n2)
 
 
-def load_nk_yaml(path):
-    """Import a refractiveindex.info .yml file. Supports 'tabulated nk/n' or
-    'formula' (Sellmeier). Returns: ('table',wl,n,k) or ('formula',fn)."""
-    import yaml
-    with open(path, encoding="utf-8") as f:
-        doc = yaml.safe_load(f)
-    for blk in doc.get("DATA", []):
-        t = blk.get("type", "")
-        if t.startswith("tabulated"):
-            rows = [r.split() for r in blk["data"].strip().splitlines()]
-            arr = np.array(rows, float)
-            wl = arr[:, 0]; n = arr[:, 1]
-            k = arr[:, 2] if arr.shape[1] > 2 else np.zeros_like(n)
-            return ("table", wl, n, k)
-        if t.startswith("formula"):
-            formula = int(t.split()[1]); coeffs = [float(v) for v in blk["coefficients"].split()]
-            return ("formula", lambda lam, c=coeffs, fm=formula: sellmeier_formula(lam, c, fm))
-    raise ValueError("no tabulated/formula DATA found in YAML")
-
-
-def register_yaml(name, path):
-    """Register a refractiveindex.info YAML as a material (table or formula)."""
-    kind, *rest = load_nk_yaml(path)
-    if kind == "table":
-        register_table(name, *rest, note=f"refractiveindex.info YAML: {_os.path.basename(path)}")
-    else:
-        MATERIALS[name] = lambda lam, fn=rest[0]: fn(lam)
-        _NOTES[name] = f"refractiveindex.info YAML formula: {_os.path.basename(path)}"
-    return kind
-
-
 def broadband_fit(wl, n, k, deg=6):
     """Polynomial broadband model over measured (wl,n,k) (MCM-like).
     Returns: fn(lam)->n+ik. For fast, smooth dispersion in the solver."""
@@ -209,3 +178,167 @@ def eps_tensor(material, lam):
         return np.diag([complex(eps_of(material[a], lam)) for a in ("xx", "yy", "zz")])
     e = complex(eps_of(material, lam))
     return np.diag([e, e, e])
+
+
+# --- sourced datasets (roadmap M1): full refractiveindex.info reader + shipped files ---
+def rii_formula(lam, formula, c):
+    """refractiveindex.info dispersion formulas 1-5 (lam in um), returns real n.
+    1 Sellmeier:   n^2 - 1 = C1 + sum Ci lam^2 / (lam^2 - C(i+1)^2)
+    2 Sellmeier-2: n^2 - 1 = C1 + sum Ci lam^2 / (lam^2 - C(i+1))
+    3 Polynomial:  n^2     = C1 + sum Ci lam^C(i+1)
+    4 RI.info:     n^2     = C1 + C2 lam^C3/(lam^2 - C4^C5) + C6 lam^C7/(lam^2 - C8^C9)
+                             + sum_{i>=10} Ci lam^C(i+1)
+    5 Cauchy:      n       = C1 + sum Ci lam^C(i+1)"""
+    lam = np.asarray(lam, float); c = list(c)
+    pairs = lambda start: zip(c[start::2], c[start + 1::2])   # noqa: E731
+    if formula in (1, 2):
+        n2 = 1.0 + c[0]
+        for b, cc in pairs(1):
+            n2 = n2 + b * lam ** 2 / (lam ** 2 - (cc ** 2 if formula == 1 else cc))
+        return np.sqrt(n2)
+    if formula == 3:
+        return np.sqrt(c[0] + sum(b * lam ** e for b, e in pairs(1)))
+    if formula == 4:
+        c = c + [0.0] * max(0, 9 - len(c))
+        n2 = c[0] + c[1] * lam ** c[2] / (lam ** 2 - c[3] ** c[4]) + c[5] * lam ** c[6] / (lam ** 2 - c[7] ** c[8])
+        for b, e in pairs(9):
+            n2 = n2 + b * lam ** e
+        return np.sqrt(n2)
+    if formula == 5:
+        return c[0] + sum(b * lam ** e for b, e in pairs(1))
+    raise ValueError(f"refractiveindex.info formula {formula} is not supported (1-5 are)")
+
+
+def _plain(text):
+    """REFERENCES / COMMENTS text without HTML or Markdown markup, one line."""
+    import re
+    t = re.sub(r"<[^>]+>", "", str(text or "")).replace("**", "").replace("*", "")
+    return " ".join(t.split())
+
+
+def load_rii(path):
+    """Read a refractiveindex.info YAML file completely: every DATA block (tabulated n, k, nk
+    and formulas 1-5) is combined into one complex index n + ik with its validity range (the
+    intersection of the blocks' ranges). Returns dict(fn, range_um, kind, references, notes,
+    file). fn raises ValueError outside the range (no extrapolation)."""
+    import yaml
+    with open(path, encoding="utf-8") as f:
+        doc = yaml.safe_load(f)
+    n_part = k_part = None
+    for blk in doc.get("DATA", []):
+        t = blk.get("type", "").strip()
+        if t.startswith("tabulated"):
+            arr = np.array([r.split() for r in blk["data"].strip().splitlines()], float)
+            arr = arr[np.argsort(arr[:, 0])]
+            what = t.split()[1]
+            if what in ("n", "nk"):
+                n_part = ("tab", arr[:, 0], arr[:, 1])
+            if what == "nk":
+                k_part = ("tab", arr[:, 0], arr[:, 2])
+            if what == "k":
+                k_part = ("tab", arr[:, 0], arr[:, 1])
+        elif t.startswith("formula"):
+            fnum = int(t.split()[1]); coeffs = [float(v) for v in str(blk["coefficients"]).split()]
+            wr = blk.get("wavelength_range")          # absent in hand-written files: unbounded
+            lo, hi = (float(v) for v in str(wr).split()) if wr else (0.0, float("inf"))
+            n_part = ("formula", fnum, coeffs, lo, hi)
+    if n_part is None:
+        raise ValueError(f"{path}: no refractive-index data block")
+
+    def rng(p):
+        return (p[1][0], p[1][-1]) if p[0] == "tab" else (p[3], p[4])
+    lo, hi = rng(n_part)
+    if k_part is not None:
+        lo, hi = max(lo, k_part[1][0]), min(hi, k_part[1][-1])
+    lo, hi = float(lo), float(hi)
+    name = _os.path.basename(path)
+
+    def fn(lam, n_part=n_part, k_part=k_part, lo=lo, hi=hi):
+        la = np.asarray(lam, float)
+        if np.any(la < lo - 1e-9) or np.any(la > hi + 1e-9):
+            raise ValueError(f"{name}: wavelength {float(np.min(la)):.4g}-{float(np.max(la)):.4g} um is outside "
+                             f"the data range {lo:.4g}-{hi:.4g} um (no extrapolation)")
+        n = (np.interp(la, n_part[1], n_part[2]) if n_part[0] == "tab"
+             else rii_formula(la, n_part[1], n_part[2]))
+        k = np.interp(la, k_part[1], k_part[2]) if k_part is not None else 0.0
+        return n + 1j * k
+    kind = "table" if n_part[0] == "tab" else f"formula {n_part[1]}"
+    return {"fn": fn, "range_um": (lo, hi), "kind": kind, "file": name,
+            "references": _plain(doc.get("REFERENCES")),
+            "notes": _plain(doc.get("NOTES") or doc.get("COMMENTS"))}
+
+
+_SOURCES = {}     # name -> load_rii() record (provenance of sourced materials)
+
+
+def register_rii(name, path, note=None):
+    """Register a refractiveindex.info YAML file as material `name` (range-checked)."""
+    rec = load_rii(path)
+    MATERIALS[name] = rec["fn"]
+    _SOURCES[name] = rec
+    _NOTES[name] = note or f"refractiveindex.info: {rec['references'][:120]}"
+    return rec["kind"]
+
+
+def register_yaml(name, path):
+    """Register a refractiveindex.info YAML as a material (all formats of load_rii)."""
+    return register_rii(name, path)
+
+
+def load_nk_yaml(path):
+    """Backward-compatible reader: ('table', wl, n, k) for a single tabulated block,
+    otherwise ('formula', fn) with fn = load_rii(path)['fn'] (range-checked)."""
+    rec = load_rii(path)
+    if rec["kind"] == "table":
+        import yaml
+        with open(path, encoding="utf-8") as f:
+            doc = yaml.safe_load(f)
+        blocks = doc.get("DATA", [])
+        if len(blocks) == 1 and blocks[0]["type"].strip() in ("tabulated nk", "tabulated n"):
+            arr = np.array([r.split() for r in blocks[0]["data"].strip().splitlines()], float)
+            k = arr[:, 2] if arr.shape[1] > 2 else np.zeros(len(arr))
+            return ("table", arr[:, 0], arr[:, 1], k)
+    return ("formula", rec["fn"])
+
+
+# Sourced datasets shipped with the package (refractiveindex.info, CC0 1.0 public domain;
+# files unchanged, see materials_data/rii/SOURCES.md). name -> file
+SOURCED = {
+    "TiO2_Siefke": "TiO2_Siefke.yml",            # ALD film, 0.12-125 um
+    "TiO2_Jolivet_amorphous": "TiO2_Jolivet-amorphous.yml",   # ALD 200 C, 0.207-0.827 um
+    "TiO2_Sarkar": "TiO2_Sarkar.yml",            # 200 nm film on glass, 0.30-1.69 um
+    "TiO2_Devore_o": "TiO2_Devore-o.yml",        # rutile crystal, ordinary ray
+    "Si3N4_Luke": "Si3N4_Luke.yml",              # LPCVD film, 0.31-5.5 um
+    "Si3N4_Philipp": "Si3N4_Philipp.yml",
+    "SiO2_Malitson": "SiO2_Malitson.yml",        # fused silica
+    "Al2O3_Malitson_o": "Al2O3_Malitson.yml",    # sapphire, ordinary ray
+    "Al2O3_Boidin": "Al2O3_Boidin.yml",          # PLD amorphous film, n only
+    "Al2O3_Kischkat": "Al2O3_Kischkat.yml",      # sputtered film, 1.54-14.3 um
+    "GaN_Kawashima_o": "GaN_Kawashima.yml",      # wurtzite film, ordinary ray
+    "GaN_Barker_o": "GaN_Barker-o.yml",
+    "aSi_Pierce": "Si_Pierce.yml",               # amorphous Si, 60 nm film, coarse (46 points)
+    "Si_Green2008": "Si_Green-2008.yml",         # crystalline Si, 300 K
+    "Si_Schinke": "Si_Schinke.yml",              # crystalline Si, 300 K, with uncertainties
+}
+_RII_DIR = _os.path.join(_DATA_DIR, "rii")
+
+
+def _load_sourced():
+    for name, fname in SOURCED.items():
+        p = _os.path.join(_RII_DIR, fname)
+        if _os.path.isfile(p):
+            register_rii(name, p)
+_load_sourced()
+
+
+_info_base = info
+def info(name):  # noqa: F811
+    """Provenance of a material -> {name, kind, range_um, points, note, approximate,
+    references, source_file, license} (the last three for sourced datasets)."""
+    if name in _SOURCES:
+        r = _SOURCES[name]
+        return {"name": name, "kind": r["kind"], "range_um": r["range_um"], "points": None,
+                "note": f"{r['notes']} — {r['references'][:160]}", "approximate": False,
+                "references": r["references"], "source_file": r["file"],
+                "license": "refractiveindex.info database, CC0 1.0 (public domain)"}
+    return _info_base(name)

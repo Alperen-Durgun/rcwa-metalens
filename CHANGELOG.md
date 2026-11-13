@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Materials — sourced datasets (roadmap M1)
+
+* 15 refractiveindex.info files shipped unchanged in `rcwa/materials_data/rii/` (CC0 1.0,
+  references and DOIs in `SOURCES.md`): TiO₂ (Siefke ALD, Jolivet amorphous ALD, Sarkar film,
+  Devore rutile), Si₃N₄ (Luke, Philipp), SiO₂ (Malitson), Al₂O₃ (Malitson, Boidin, Kischkat),
+  GaN (Kawashima, Barker), amorphous Si (Pierce), crystalline Si (Green 2008, Schinke).
+  `materials.info(name)` returns the reference and license.
+* New full reader `materials.load_rii` / `register_rii` (also behind `register_yaml`):
+  formulas 1–5, tabulated n / k / nk blocks merged, validity range = intersection, and no
+  extrapolation for formulas either. **Fixed:** the old reader used only the first data block
+  (a separate k block was ignored) and evaluated any formula as a Sellmeier formula
+  (formula 4, e.g. Devore's rutile, gave wrong values); formulas had no range check.
+* Checks: Malitson SiO₂ equals the in-code formula to 2e-16 and gives n_d = 1.4585; Devore
+  (formula 4) equals its closed form exactly.
+* **Finding for the recipe work (0.4):** the default `TiO2_t` table has n = 2.50 at 633 nm; the
+  ALD TiO₂ films are 2.39 (Siefke) and 2.41 (Jolivet), another film 2.13 (Sarkar). The default
+  recipe therefore assumes a ~0.1 higher index than measured ALD films. Not changed yet: a lower
+  index needs a re-optimized height/period (U1).
+
 ### Tooling — benchmark suite (roadmap N5)
 
 * `benchmarks/run.py`: four fixed problems (1D slab against Fresnel, 2D pillar at M = 9 with
