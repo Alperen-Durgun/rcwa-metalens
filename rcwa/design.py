@@ -49,17 +49,38 @@ def resolve_jobs(n_jobs=None):
     return (os.cpu_count() or 1) if n_jobs <= 0 else n_jobs
 
 
+def pillar_layers(shape, s, L, H, N, n, n_bg, sidewall_deg=90.0, n_steps=1, residual=None):
+    """Layer stack of one pillar, from the substrate side up: an optional uniform residual
+    film (residual = (complex index, thickness um)), then the pillar. sidewall_deg < 90 makes
+    a tapered pillar (wider at the bottom, the usual etch profile), approximated by n_steps
+    slices whose width changes linearly; `s` is the width at mid-height. Width change over the
+    full height: 2 H / tan(sidewall). Returns [(eps2d, thickness), ...]."""
+    layers = []
+    if residual is not None and residual[1] > 0:
+        layers.append((np.full((N, N), complex(residual[0]) ** 2), float(residual[1])))
+    steps = max(1, int(n_steps))
+    taper = 0.0 if sidewall_deg >= 90 else 2 * H / np.tan(np.deg2rad(sidewall_deg))
+    for i in range(steps):
+        frac = (i + 0.5) / steps                                  # 0 = bottom, 1 = top
+        w = max(float(s) + (0.5 - frac) * taper, 0.0)
+        layers.append((shapes.rasterize(shape, w, L, N, n_pillar=n, n_bg=n_bg), H / steps))
+    return layers
+
+
 def _atom_t(job):
     """Top-level (picklable) worker: zeroth-order co-polarized t of one pillar, raw solver
-    convention. job = (lam0, L, H, shape, size, raster_n, n_pillar, n_bg, n_sub, M)."""
-    lam0, L, H, shape, s, N, n, n_bg, n_sub, M = job
-    eps = shapes.rasterize(shape, s, L, N, n_pillar=n, n_bg=n_bg)
-    r = solve_rcwa_2d(lam0, 0, 0, n_sub ** 2, n_bg ** 2, L, L, [(eps, H)], M, M, pol=(0., 1.))
+    convention. job = (lam0, L, H, shape, size, raster_n, n_pillar, n_bg, n_sub, M, geometry)
+    with geometry = (sidewall_deg, n_steps, residual) (see pillar_layers)."""
+    lam0, L, H, shape, s, N, n, n_bg, n_sub, M = job[:10]
+    sidewall_deg, n_steps, residual = job[10] if len(job) > 10 else (90.0, 1, None)
+    layers = pillar_layers(shape, s, L, H, N, n, n_bg, sidewall_deg, n_steps, residual)
+    r = solve_rcwa_2d(lam0, 0, 0, n_sub ** 2, n_bg ** 2, L, L, layers, M, M, pol=(0., 1.))
     return complex(r["ty"][r["i0"]])
 
 
 def meta_atom_library(lam0, L, H, sizes=None, shape="circle", material=None, n_pillar=2.4,
-                      M=9, n_sub=1.0, n_bg=1.0, raster_n=None, use_cache=True, n_jobs=None):
+                      M=9, n_sub=1.0, n_bg=1.0, raster_n=None, use_cache=True, n_jobs=None,
+                      sidewall_deg=90.0, n_steps=None, residual=None):
     """Transmission library of a pillar on a square lattice versus its size.
 
     Light is incident from the substrate (index n_sub) and exits into the background
@@ -74,13 +95,24 @@ def meta_atom_library(lam0, L, H, sizes=None, shape="circle", material=None, n_p
       coverage : phase span in units of 2*pi (>= 1 means a full 2*pi library)
       n        : complex pillar index used
     n_jobs: worker processes for the solves (see resolve_jobs); results do not depend on it.
+    Fabrication geometry (roadmap M4, P5): sidewall_deg < 90 tapers the pillar (n_steps slices,
+    default 5; the size is the mid-height width); residual = (material name or index,
+    thickness um) adds a uniform film between substrate and pillars (incomplete etch).
     """
     sizes = default_sizes(L) if sizes is None else np.asarray(sizes, float)
     n = pillar_index(material, lam0, n_pillar)
     N = int(raster_n or shapes.DEFAULT_N)
 
+    steps = int(n_steps) if n_steps else (5 if sidewall_deg < 90 else 1)
+    res = None
+    if residual is not None:
+        rn = residual[0]
+        rn = complex(np.sqrt(complex(materials.eps_of(rn, lam0)))) if isinstance(rn, str) else complex(rn)
+        res = (rn, float(residual[1]))
+    geom = (float(sidewall_deg), steps, res)
+
     def _compute():
-        jobs = [(lam0, L, H, shape, float(s), N, n, n_bg, n_sub, int(M)) for s in sizes]
+        jobs = [(lam0, L, H, shape, float(s), N, n, n_bg, n_sub, int(M), geom) for s in sizes]
         nj = min(resolve_jobs(n_jobs), len(jobs)) if jobs else 1
         t = np.array(parallel_map(_atom_t, jobs, n_jobs=nj), complex).reshape(len(sizes))
         return {"t_re": t.real, "t_im": t.imag}
@@ -89,19 +121,23 @@ def meta_atom_library(lam0, L, H, sizes=None, shape="circle", material=None, n_p
            "shape": shape, "M": int(M), "n": (round(n.real, 5), round(n.imag, 5)),
            "n_sub": float(n_sub), "n_bg": float(n_bg),
            "N": N, "sizes": tuple(np.round(sizes, 6))}
+    if sidewall_deg < 90 or steps != 1:                  # only non-default geometry changes the key
+        key["sidewall"] = (round(float(sidewall_deg), 4), steps)
+    if res is not None and res[1] > 0:
+        key["residual"] = (round(res[0].real, 5), round(res[0].imag, 5), round(res[1], 6))
     c = cache.cached_library("atomlib", key, _compute) if use_cache else _compute()
     t = to_physical(c["t_re"] + 1j * c["t_im"])
     ph = np.unwrap(np.angle(t)); ph = ph - ph.min()
     return {"sizes": sizes, "t": t, "phase": ph, "amp": np.abs(t),
             "coverage": float(np.ptp(ph) / (2 * np.pi)), "n": n,
             "shape": shape, "L": L, "H": H, "lam0": lam0, "M": M, "n_sub": n_sub, "n_bg": n_bg,
-            "raster_n": N}
+            "raster_n": N, "sidewall_deg": float(sidewall_deg), "n_steps": steps, "residual": res}
 
 
 def _library_dict(sizes, t, base):
     ph = np.unwrap(np.angle(t)); ph = ph - ph.min()
-    out = {k: base[k] for k in ("n", "shape", "L", "H", "lam0", "M", "n_sub", "n_bg", "raster_n")
-           if k in base}
+    out = {k: base[k] for k in ("n", "shape", "L", "H", "lam0", "M", "n_sub", "n_bg", "raster_n",
+                                "sidewall_deg", "n_steps", "residual") if k in base}
     out.update({"sizes": sizes, "t": t, "phase": ph, "amp": np.abs(t),
                 "coverage": float(np.ptp(ph) / (2 * np.pi))})
     return out
@@ -148,7 +184,9 @@ def refine_library(lib, tol=0.05, min_step=0.5e-3, max_solves=80, prominence=0.2
     A = float(np.max(np.abs(t)))
     kw = dict(lam0=lib["lam0"], L=lib["L"], H=lib["H"], shape=lib["shape"], material=None,
               n_pillar=lib["n"], M=lib["M"], n_sub=lib["n_sub"], n_bg=lib["n_bg"],
-              raster_n=lib.get("raster_n"), use_cache=use_cache, n_jobs=n_jobs)
+              raster_n=lib.get("raster_n"), use_cache=use_cache, n_jobs=n_jobs,
+              sidewall_deg=lib.get("sidewall_deg", 90.0), n_steps=lib.get("n_steps"),
+              residual=lib.get("residual"))
     ss = sorted(pts)
     todo = [(a, b) for a, b in zip(ss[:-1], ss[1:]) if b - a >= 2 * min_step]
     n_solved = 0
@@ -223,7 +261,8 @@ def certify_library(lib, dM=2, tol_phase=0.02, tol_amp=0.01, tol_res=0.05, sizes
     hi = meta_atom_library(lib["lam0"], lib["L"], lib["H"], sizes=s, shape=lib["shape"],
                            material=None, n_pillar=lib["n"], M=M2, n_sub=lib["n_sub"],
                            n_bg=lib["n_bg"], raster_n=lib.get("raster_n"), use_cache=use_cache,
-                           n_jobs=n_jobs)["t"]
+                           n_jobs=n_jobs, sidewall_deg=lib.get("sidewall_deg", 90.0),
+                           n_steps=lib.get("n_steps"), residual=lib.get("residual"))["t"]
     dphi = np.abs(np.angle(t * np.conj(hi)))
     damp = np.abs(np.abs(t) - np.abs(hi))
     inres = np.zeros(len(s), bool)
@@ -413,7 +452,8 @@ def strehl_at_focus(E0, L, lam0, zf, ff=None, n_bg=1.0, u=4, pad=1.6):
 # --------------------------------------------------------------------------- one-call designer
 def design_lens(lam0, L, H, D_lens, f, shape="circle", material=None, n_pillar=2.4, M=9,
                 n_sub=1.0, n_bg=1.0, sizes=None, mode="robust", lib=None, refine=True,
-                guard_nm=None, sigma_nm=3.0, max_gap=np.pi / 4, certify=False):
+                guard_nm=None, sigma_nm=3.0, max_gap=np.pi / 4, certify=False,
+                sidewall_deg=90.0, n_steps=None, residual=None):
     """Design a singlet metalens: library -> hyperbolic phase -> atom selection.
 
     Defaults since 0.3.0: M = 9, refined library, robust selection for a 3 nm size error
@@ -433,7 +473,8 @@ def design_lens(lam0, L, H, D_lens, f, shape="circle", material=None, n_pillar=2
     map), size_map (um, 0 outside), E0 (aperture field, physics convention), phi_target,
     offset, placements (list for GDS / full-wave bridges)."""
     lib = lib or meta_atom_library(lam0, L, H, sizes=sizes, shape=shape, material=material,
-                                   n_pillar=n_pillar, M=M, n_sub=n_sub, n_bg=n_bg)
+                                   n_pillar=n_pillar, M=M, n_sub=n_sub, n_bg=n_bg,
+                                   sidewall_deg=sidewall_deg, n_steps=n_steps, residual=residual)
     if (refine or guard_nm is not None) and not lib.get("refined"):
         lib = refine_library(lib)
     allowed = resonance_mask(lib, guard_nm) if guard_nm is not None else None

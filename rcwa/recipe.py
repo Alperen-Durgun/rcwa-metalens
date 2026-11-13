@@ -38,7 +38,8 @@ def library_fom(lib, sigma_nm=3.0, nbin=72, allowed=None):
 
 def evaluate_cell(lam0, H, L, material=None, n_pillar=2.4, shape="circle", min_feature=0.06,
                   min_gap=0.06, max_aspect=10.0, M=9, n_sizes=16, sigma_nm=3.0, n_sub=1.0,
-                  n_bg=1.0, refine=True, n_jobs=None, certify=False):
+                  n_bg=1.0, refine=True, n_jobs=None, certify=False, sidewall_deg=90.0,
+                  residual=None):
     """Score one (H, L) candidate. Returns a dict with the constraints, the library summary
     and the FOM; 'feasible' is False (with 'reason') when a hard limit is violated.
     certify=True also runs design.certify_library (M vs M+2) and scores only the sizes that
@@ -54,7 +55,8 @@ def evaluate_cell(lam0, H, L, material=None, n_pillar=2.4, shape="circle", min_f
         return {**row, "feasible": False, "reason": f"aspect ratio {row['aspect']:.1f} > {max_aspect}"}
     sizes = np.linspace(row["s_min"], row["s_max"], int(n_sizes))
     lib = dz.meta_atom_library(lam0, L, H, sizes=sizes, shape=shape, material=material,
-                               n_pillar=n_pillar, M=M, n_sub=n_sub, n_bg=n_bg, n_jobs=n_jobs)
+                               n_pillar=n_pillar, M=M, n_sub=n_sub, n_bg=n_bg, n_jobs=n_jobs,
+                               sidewall_deg=sidewall_deg, residual=residual)
     if refine:
         lib = dz.refine_library(lib, n_jobs=n_jobs)
     allowed = None; cert = {}

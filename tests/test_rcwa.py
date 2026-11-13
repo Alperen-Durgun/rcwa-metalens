@@ -899,6 +899,24 @@ def test_index_sensitivity_and_spread():
     sp = materials.index_spread(["TiO2_Siefke", "TiO2_Jolivet_amorphous"], 0.633)
     assert 0.01 < sp["spread"] < 0.05
 
+
+def test_fabrication_geometry_residual_and_sidewall():
+    """M4/P5: a residual film with the substrate index only adds the propagation phase
+    exp(+i k0 n_sub t) (physics convention) - exactly; a vertical pillar cut into slices equals
+    the single layer; a tapered pillar is wider at the bottom and changes t."""
+    from rcwa import design as dz
+    kw = dict(sizes=[0.12, 0.22], material="TiO2_t", M=3, n_sub=1.46, use_cache=False)
+    t0 = dz.meta_atom_library(0.633, 0.35, 0.60, **kw)["t"]
+    tr = dz.meta_atom_library(0.633, 0.35, 0.60, residual=(1.46, 0.03), **kw)["t"]
+    assert np.allclose(tr, t0 * np.exp(1j * 2 * np.pi / 0.633 * 1.46 * 0.03), atol=1e-10)
+    ts = dz.meta_atom_library(0.633, 0.35, 0.60, sidewall_deg=90, n_steps=4, **kw)["t"]
+    assert np.allclose(ts, t0, atol=1e-9)
+    tt = dz.meta_atom_library(0.633, 0.35, 0.60, sidewall_deg=85, **kw)["t"]
+    assert np.abs(tt - t0).max() > 1e-3
+    lay = dz.pillar_layers("circle", 0.2, 0.35, 0.6, 128, 2.5, 1.0, sidewall_deg=85, n_steps=5)
+    fill = [float(np.mean(np.abs(e) > 1.5)) for e, _ in lay]
+    assert len(lay) == 5 and all(a > b for a, b in zip(fill, fill[1:]))     # bottom slice widest
+
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio
     utf8_stdio()
