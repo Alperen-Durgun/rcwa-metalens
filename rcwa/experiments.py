@@ -1008,7 +1008,7 @@ def run_recipe_search(fm, slug):
     kw = dict(material=mat, shape=shape, n_sub=n_sub, min_feature=num(fm, "min_feature", 0.06),
               min_gap=num(fm, "min_gap", 0.06), max_aspect=num(fm, "max_aspect", 15.0),
               M=int(num(fm, "M", 9, int)), n_sizes=int(num(fm, "n_sizes", 16, int)),
-              sigma_nm=num(fm, "sigma_nm", 3.0))
+              sigma_nm=num(fm, "sigma_nm", 3.0), certify=bool(int(num(fm, "certify", 0, int))))
     max_gap = num(fm, "max_phase_gap", float(np.pi / 4))
     rows = recipe.search_unit_cell(lam0, Hs, Ls, **kw)
     F = np.full((len(Hs), len(Ls)), np.nan)
@@ -1032,6 +1032,15 @@ def run_recipe_search(fm, slug):
     ax.set_title(f"Recipe search — {mat}/{shape}, λ = {lam0*1000:.0f} nm, substrate n = {n_sub:.3f}\n"
                  f"(x: phase gap > {max_gap:.2f} rad; ★: recommended)", fontsize=10)
     figpath = _out(slug + ".png"); fig.tight_layout(); fig.savefig(figpath, dpi=130); plt.close(fig)
+    idn = num(fm, "index_dn", 0.0); sens_txt = ""
+    if best and idn > 0:                        # material-index sensitivity of the recommended recipe
+        sens = recipe.index_sensitivity(lam0, best["H"], best["L"], material=mat, shape=shape,
+                                        dn=(-2 * idn, -idn, idn, 2 * idn), n_sub=n_sub,
+                                        min_feature=kw["min_feature"], min_gap=kw["min_gap"], M=kw["M"],
+                                        n_sizes=kw["n_sizes"], sigma_nm=kw["sigma_nm"])
+        sens_txt = ("- **Index sensitivity of the recommended recipe** (atoms fixed at the nominal index, used sizes re-solved): "
+                    f"n0 = {sens['n0'].real:.3f}, FOM {sens['fom_nominal']:.3f} → "
+                    + ", ".join(f"Δn {d:+.3f}: {v:.3f}" for d, v in sorted(sens["fom"].items())) + "\n")
     feas = [r for r in rows if r["feasible"]][:8]
     tab = "".join(f"| {r['H']*1000:.0f} | {r['L']*1000:.0f} | {r['s_min']*1000:.0f}–{r['s_max']*1000:.0f} | {r['aspect']:.1f} | "
                   f"{r['coverage_2pi']:.2f} | {r['max_phase_gap']:.2f} | {r['min_abs_t']:.2f} | "
@@ -1047,8 +1056,13 @@ def run_recipe_search(fm, slug):
                f"{best['n_deep_resonances']} deep resonance(s), sampling allows NA ≤ {best['na_max_sampling']:.2f} "
                f"(rule: within {num(fm, 'fom_tie', 0.01):.2f} of the best FOM, fewest deep resonances, then highest NA)\n" if best else
                f"- **No candidate** closes the phase circle within {max_gap:.2f} rad under these limits: relax a limit or widen the scan.\n")
+            + sens_txt
             + "\n| H (nm) | L (nm) | sizes (nm) | aspect | coverage (2π) | max phase gap (rad) | min \\|t\\| | resonances nm (depth \\|t\\|) | max NA (λ/2L) | FOM nominal | FOM robust |\n"
             "|---|---|---|---|---|---|---|---|---|---|---|\n" + tab
+            + ("\n- Convergence certificate (M vs M+2) applied: uncertified sizes are excluded from the FOM and the phase gap. "
+               + (f"Recommended recipe: {best['n_uncertified']} uncertified size(s)"
+                  + (f" ({', '.join(f'{v:.1f}' for v in best['uncertified_nm'])} nm) — do not use them" if best['n_uncertified'] else "") + ".\n"
+                  if best else "\n") if kw["certify"] else "")
             + (f"\n- Infeasible candidates: {len(infeas)} ({'; '.join(sorted(set(r['reason'] for r in infeas)))})\n" if infeas else "")
             + "- FOM = focal intensity of an ideal lens from this library relative to a perfect phase plate; "
               "locally periodic approximation, normal incidence. Verify the chosen recipe with FDTD (examples/17).")

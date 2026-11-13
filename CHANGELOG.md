@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Recipes — certificate and material-index sensitivity (roadmap N1 in the search, M2)
+
+* `recipe.evaluate_cell(..., certify=True)` / `recipe_search certify=1`: the library is
+  certified (M vs M+2) and only certified sizes enter the FOM and the phase gap.
+* `recipe.index_sensitivity` / `recipe_search index_dn=…`: atoms chosen at the nominal index,
+  the used sizes re-solved at n ± Δn, FOM of that fixed selection. `materials.index_spread`
+  compares datasets of one material at a wavelength.
+* Findings for the reference recipes (details in `docs/recipes/README.md`): the 633 nm TiO₂
+  recipe fails the certificate next to its resonances (11 of 61 sizes, up to 0.83 rad at 310 nm)
+  but the robust selection never uses those sizes (FOM unchanged when they are excluded); its
+  FOM drops from 0.961 to 0.932 for Δn = +0.02, the difference between the two ALD datasets.
+  Si₃N₄ (532 nm) and a-Si (940 nm) pass the certificate; Si₃N₄ is the most index-tolerant
+  (±0.02: −0.3 points), a-Si the least (±0.2: −9 to −13 points).
+
 ### Validation — the recommended 633 nm recipe against FDTD
 
 * Recipe: ALD TiO₂ (Siefke data), circles, H = 600 nm, L = 375 nm, on fused silica, light from

@@ -342,3 +342,15 @@ def info(name):  # noqa: F811
                 "references": r["references"], "source_file": r["file"],
                 "license": "refractiveindex.info database, CC0 1.0 (public domain)"}
     return _info_base(name)
+
+
+def index_spread(names, lam):
+    """Complex index of several datasets of one material at lam (um): {name: n}, plus
+    'spread' = max - min of the real part. A first estimate of the film-to-film uncertainty
+    when no measurement of your own film exists (roadmap M2)."""
+    out = {}
+    for name in names:
+        out[name] = complex(np.sqrt(complex(eps_of(name, lam))))
+    re_ = [v.real for v in out.values()]
+    out["spread"] = float(max(re_) - min(re_)) if re_ else 0.0
+    return out

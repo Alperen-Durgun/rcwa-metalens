@@ -26,7 +26,7 @@ FAST = {
     "metalens_design_full": {"D_lens": 4.0, "f": 6.0, "M": 4},
     "tolerance_analysis": {"n_trial": 4, "n_seg": 6},
     "recipe_search": {"n_H": 2, "n_L": 1, "H_min": 0.5, "H_max": 0.6, "L_min": 0.35, "L_max": 0.35,
-                      "M": 3, "n_sizes": 6},
+                      "M": 3, "n_sizes": 6, "index_dn": 0.05},
     "lens_tolerance": {"D_lens": 4.0, "f": 6.0, "M": 3, "n_bias": 3, "n_trial": 2,
                        "refine_max_solves": 10},
     "fov_analysis": {"D_lens": 4.0, "f": 6.0, "n_angle": 3, "angle_max": 10, "M": 4},

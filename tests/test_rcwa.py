@@ -872,6 +872,8 @@ def test_recipe_fom_analytic_and_constraints():
     assert "aspect" in recipe.evaluate_cell(0.633, 1.2, 0.35, max_aspect=10)["reason"]
     assert recipe.evaluate_cell(0.633, 0.9, 0.35, max_aspect=15, min_feature=0.06, min_gap=0.06,
                                 M=2, n_sizes=3, refine=False)["feasible"]          # exactly at the limit
+    r = recipe.evaluate_cell(0.633, 0.6, 0.35, M=2, n_sizes=4, refine=False, certify=True)
+    assert r["n_uncertified"] >= 3 and r["fom_robust"] < 0.1            # M=2: only the thinnest pillar converges
     assert "size range" in recipe.evaluate_cell(0.633, 0.6, 0.11)["reason"]
 
 
@@ -886,6 +888,16 @@ def test_recipe_recommendation_rule():
     assert recipe.recommend(rows)["L"] == 0.375               # 0.948 is within 0.01, no deep resonance
     assert recipe.recommend(rows, tie=0.001)["L"] == 0.40     # strict tie: highest FOM wins
     assert recipe.recommend([rows[2]]) is None               # only candidate leaves a phase gap
+
+
+def test_index_sensitivity_and_spread():
+    """M2: with dn = 0 the fixed-selection FOM equals the nominal one; an index shift changes it.
+    index_spread reports the film-to-film spread of the shipped ALD TiO2 datasets."""
+    from rcwa import recipe, materials
+    r = recipe.index_sensitivity(0.633, 0.60, 0.35, n_pillar=2.4, dn=(0.0, 0.15), M=2, n_sizes=6)
+    assert abs(r["fom"][0.0] - r["fom_nominal"]) < 1e-10 and abs(r["fom"][0.15] - r["fom_nominal"]) > 1e-4
+    sp = materials.index_spread(["TiO2_Siefke", "TiO2_Jolivet_amorphous"], 0.633)
+    assert 0.01 < sp["spread"] < 0.05
 
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio

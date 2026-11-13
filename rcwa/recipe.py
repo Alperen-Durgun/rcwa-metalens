@@ -38,9 +38,11 @@ def library_fom(lib, sigma_nm=3.0, nbin=72, allowed=None):
 
 def evaluate_cell(lam0, H, L, material=None, n_pillar=2.4, shape="circle", min_feature=0.06,
                   min_gap=0.06, max_aspect=10.0, M=9, n_sizes=16, sigma_nm=3.0, n_sub=1.0,
-                  n_bg=1.0, refine=True, n_jobs=None):
+                  n_bg=1.0, refine=True, n_jobs=None, certify=False):
     """Score one (H, L) candidate. Returns a dict with the constraints, the library summary
-    and the FOM; 'feasible' is False (with 'reason') when a hard limit is violated."""
+    and the FOM; 'feasible' is False (with 'reason') when a hard limit is violated.
+    certify=True also runs design.certify_library (M vs M+2) and scores only the sizes that
+    pass it ('n_uncertified', 'certified_range' report what was excluded)."""
     row = {"H": float(H), "L": float(L), "lam0": float(lam0), "material": material, "shape": shape,
            "s_min": float(min_feature), "s_max": float(L - min_gap),
            "aspect": float(H / min(min_feature, min_gap))}
@@ -55,15 +57,23 @@ def evaluate_cell(lam0, H, L, material=None, n_pillar=2.4, shape="circle", min_f
                                n_pillar=n_pillar, M=M, n_sub=n_sub, n_bg=n_bg, n_jobs=n_jobs)
     if refine:
         lib = dz.refine_library(lib, n_jobs=n_jobs)
-    fom_r, fom_n = library_fom(lib, sigma_nm=sigma_nm)
-    gap = dz.max_phase_gap(lib["t"])
+    allowed = None; cert = {}
+    if certify:
+        c = dz.certify_library(lib, n_jobs=n_jobs)["convergence"]
+        allowed = np.asarray(c["ok"], bool)
+        cert = {"certified": True, "n_uncertified": int((~allowed).sum()),
+                "uncertified_nm": [round(float(s) * 1000, 1) for s in c["sizes"][~allowed]]}
+        if not allowed.any():
+            return {**row, "feasible": False, "reason": "no size passes the convergence certificate"}
+    fom_r, fom_n = library_fom(lib, sigma_nm=sigma_nm, allowed=allowed)
+    gap = dz.max_phase_gap(lib["t"], allowed)
     res = lib.get("resonances", [])
     return {**row, "feasible": True, "reason": "", "coverage_2pi": float(lib["coverage"]),
             "max_phase_gap": float(gap), "min_abs_t": float(lib["amp"].min()),
             "resonances": [round(r["center"], 5) for r in res],
             "resonance_depth": [round(r["t_min"], 3) for r in res],
             "n_deep_resonances": int(sum(r["t_min"] < 0.5 for r in res)),
-            "na_max_sampling": float(min(1.0, lam0 / (2 * L))),
+            "na_max_sampling": float(min(1.0, lam0 / (2 * L))), **cert,
             "n_library": int(len(lib["sizes"])), "fom_robust": fom_r, "fom_nominal": fom_n}
 
 
@@ -88,3 +98,36 @@ def search_unit_cell(lam0, H_list, L_list, **kw):
     feasible ones first, sorted by robust FOM (best first)."""
     rows = [evaluate_cell(lam0, H, L, **kw) for H in H_list for L in L_list]
     return sorted(rows, key=lambda r: (not r["feasible"], -r.get("fom_robust", 0.0)))
+
+
+def index_sensitivity(lam0, H, L, material=None, n_pillar=2.4, dn=(-0.05, -0.02, 0.02, 0.05),
+                      shape="circle", min_feature=0.06, min_gap=0.06, M=9, n_sizes=16,
+                      sigma_nm=3.0, n_sub=1.0, n_bg=1.0, nbin=72, n_jobs=None):
+    """Material-index sensitivity of a recipe (roadmap M2).
+
+    The atoms are chosen once, at the nominal index, with the robust rule; then only the sizes
+    actually used are re-solved with the pillar index shifted by each dn, and the FOM of that
+    FIXED selection is recomputed - what a fabricated lens experiences if the deposited film's
+    index differs from the data. Returns dict(n0, fom_nominal (dn = 0, fixed selection),
+    fom = {dn: value}, sizes_used)."""
+    sizes = np.linspace(min_feature, L - min_gap, int(n_sizes))
+    n0 = dz.pillar_index(material, lam0, n_pillar)
+    lib = dz.refine_library(dz.meta_atom_library(lam0, L, H, sizes=sizes, shape=shape, material=material,
+                                                 n_pillar=n_pillar, M=M, n_sub=n_sub, n_bg=n_bg,
+                                                 n_jobs=n_jobs), n_jobs=n_jobs)
+    t = np.asarray(lib["t"], complex)
+    stats = dz.size_error_stats(lib, sigma_nm) if sigma_nm else (t, np.zeros(len(t)))
+    lut, _ = dz.phase_lut(t, nbin=nbin, mode="robust", t_stats=stats)
+    used = np.unique(lut)
+    phases = (np.arange(nbin) + 0.5) * 2 * np.pi / nbin
+    scale = n_bg / n_sub
+
+    def fom(t_used):
+        tk = dict(zip(used, t_used))
+        return float(scale * abs(np.mean(np.array([tk[k] for k in lut]) * np.exp(-1j * phases))) ** 2)
+    out = {"n0": complex(n0), "fom_nominal": fom(t[used]), "fom": {}, "sizes_used": lib["sizes"][used]}
+    for d in dn:
+        td = dz.meta_atom_library(lam0, L, H, sizes=lib["sizes"][used], shape=shape, material=None,
+                                  n_pillar=n0 + d, M=M, n_sub=n_sub, n_bg=n_bg, n_jobs=n_jobs)["t"]
+        out["fom"][float(d)] = fom(td)
+    return out
