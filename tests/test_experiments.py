@@ -71,6 +71,13 @@ def test_design_full_outputs():
     assert "DRC" in body and "Material data" in body and "Strehl" in body
 
 
+def test_fov_with_angle_dependent_atoms():
+    """fov_analysis atom_angle=1 (roadmap P2): both models reported, substrate order noted."""
+    fig, body, summary = R.RUNNERS["fov_analysis"]({**FAST["fov_analysis"], "angle_max": 20, "atom_angle": 1}, "T_fov_atoms")
+    assert os.path.isfile(fig) and "Angle-dependent atoms (TE)" in body and "fixed response" in body
+    assert "substrate above 13.4" in body and "nan" not in summary.lower()
+
+
 def test_large_tiled_writes_tiles():
     from rcwa import gds
     body, _ = _run("metalens_large_tiled")

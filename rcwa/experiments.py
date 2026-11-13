@@ -870,39 +870,69 @@ def _prop_focus(E0, L, lam0, f, tilt_deg=0.0, zfix=None):
 def run_fov_analysis(fm, slug):
     """Off-axis IMAGE QUALITY: focal shift vs angle (distortion), spot degradation
     (coma/field aberration ~ FWHM growth), relative efficiency (Strehl), field curvature (focus z shift).
-    FOV = the half-angle within which the lens stays diffraction-limited."""
+    FOV = the half-angle within which the lens stays diffraction-limited.
+    atom_angle=1 solves every used pillar size again with RCWA at each angle (rcwa/angular.py,
+    roadmap P2) and compares with the former assumption of an angle-independent atom response."""
     d = _build_lens(fm); f = d["f"]; lam0 = d["lam0"]; NA = d["NA"]; dl = lam0 / (2 * NA)
     amax = num(fm, "angle_max", 15.0); na = int(num(fm, "n_angle", 8, int))
+    atom_angle = bool(int(num(fm, "atom_angle", 0, int))); pol = fm.get("pol", "TE")
     angles = np.linspace(0, amax, na)
+    from . import angular
+    a_sub = angular.first_order_angle(lam0, d["L"], d["lib"]["n_sub"])
     r0 = _prop_focus(d["E0"], d["L"], lam0, f)
     peak0 = r0["peak"]; z0 = r0["zf"]
     th, xpk, zpk, fw, rstrehl, dist = [], [], [], [], [], []
     for a in angles:
         r = _prop_focus(d["E0"], d["L"], lam0, f, tilt_deg=a, zfix=z0)   # FLAT sensor (fixed z0)
         rc = _prop_focus(d["E0"], d["L"], lam0, f, tilt_deg=a)            # best focus (field curvature)
-        ideal = f * np.tan(np.deg2rad(a))
+        ideal = z0 * np.tan(np.deg2rad(a))                         # chief ray on the sensor plane z0
         th.append(a); xpk.append(r["x_peak"]); zpk.append(rc["zf"]); fw.append(r["fwhm"] * 1000)
         rstrehl.append(r["peak"] / peak0)
         dist.append(100 * (r["x_peak"] - ideal) / ideal if ideal > 1e-6 else 0.0)
     fw = np.array(fw); rstrehl = np.array(rstrehl); th = np.array(th)
-    ok = (fw <= 1.5 * dl * 1000) & (rstrehl >= 0.5)
+    cmp = angular.fov_compare(d, angles, pol=pol) if atom_angle else None
+    if cmp is not None:                               # FOV judged with the angle-dependent atoms
+        fw_a = np.array(cmp["atoms"]["fwhm"]) * 1000; rs_a = np.array(cmp["atoms"]["rel_peak"])
+        ok = (fw_a <= 1.5 * dl * 1000) & (rs_a >= 0.5)
+    else:
+        ok = (fw <= 1.5 * dl * 1000) & (rstrehl >= 0.5)
     fov_half = float(th[ok].max()) if ok.any() else 0.0
     fig, ax = plt.subplots(1, 3, figsize=(14, 4.2))
-    ax[0].plot(th, fw, "o-"); ax[0].axhline(dl * 1000, color="gray", ls=":", label=f"diffraction {dl*1000:.0f}nm")
-    ax[0].set_xlabel("incidence angle (°)"); ax[0].set_ylabel("focal FWHM (nm)"); ax[0].set_title("Spot degradation (field aberration)"); ax[0].legend(); ax[0].grid(alpha=.3)
-    ax[1].plot(th, rstrehl, "o-"); ax[1].axhline(0.8, color="gray", ls=":", label="0.8 (diffraction-limited)")
-    ax[1].set_xlabel("incidence angle (°)"); ax[1].set_ylabel("relative Strehl (Iθ/I0)"); ax[1].set_title(f"Angular efficiency · half-FOV≈{fov_half:.0f}°"); ax[1].legend(); ax[1].grid(alpha=.3)
+    ax[0].plot(th, fw, "o-", label="atom response fixed" if cmp else None)
+    ax[1].plot(th, rstrehl, "o-", label="atom response fixed" if cmp else None)
+    if cmp is not None:
+        ax[0].plot(th, fw_a, "s--", label="angle-dependent atoms")
+        ax[1].plot(th, rs_a, "s--", label="angle-dependent atoms")
+    for axx in ax[:2]:
+        if a_sub is not None and a_sub <= amax:
+            axx.axvline(a_sub, color="red", ls=":", lw=1, label=f"substrate order opens ({a_sub:.1f}°)")
+    ax[0].axhline(dl * 1000, color="gray", ls=":", label=f"diffraction {dl*1000:.0f}nm")
+    ax[0].set_xlabel("incidence angle (°)"); ax[0].set_ylabel("focal FWHM (nm)"); ax[0].set_title("Spot degradation (field aberration)"); ax[0].legend(fontsize=7); ax[0].grid(alpha=.3)
+    ax[1].axhline(0.8, color="gray", ls=":", label="0.8 (diffraction-limited)")
+    ax[1].set_xlabel("incidence angle (°)"); ax[1].set_ylabel("relative peak (Iθ/I0)"); ax[1].set_title(f"Angular efficiency · half-FOV≈{fov_half:.0f}°"); ax[1].legend(fontsize=7); ax[1].grid(alpha=.3)
     ax[2].plot(th, dist, "o-"); ax[2].axhline(0, color="gray", ls=":")
-    ax[2].set_xlabel("incidence angle (°)"); ax[2].set_ylabel("distortion (%)"); ax[2].set_title("Distortion (x vs f·tanθ)"); ax[2].grid(alpha=.3)
-    fig.suptitle(f"OFF-AXIS IMAGE QUALITY — {d['shape']}/{fm.get('material','')}, D={d['D_lens']:.0f}um f={f}um NA={NA:.2f}")
+    ax[2].set_xlabel("incidence angle (°)"); ax[2].set_ylabel("distortion (%)"); ax[2].set_title("Distortion (x vs z0·tanθ)"); ax[2].grid(alpha=.3)
+    fig.suptitle(f"OFF-AXIS IMAGE QUALITY — {d['shape']}/{fm.get('material', RECIPE['material'])}, D={d['D_lens']:.0f}um f={f}um NA={NA:.2f}")
     figpath = _out(slug + ".png"); fig.tight_layout(); fig.savefig(figpath, dpi=130); plt.close(fig)
     fc = float(np.max(np.abs(np.array(zpk) - z0)))
     body = (f"- **NA:** {NA:.2f} · diffraction FWHM {dl*1000:.0f}nm · normal-incidence focus z={z0:.1f}um\n"
-            f"- **Half-FOV (diffraction-limited):** ~{fov_half:.0f}° (FWHM≤1.5×diffraction & relative Strehl≥0.5)\n"
-            f"- **At the max angle ({amax:.0f}°):** FWHM={fw[-1]:.0f}nm, relative Strehl={rstrehl[-1]:.2f}, distortion={dist[-1]:.1f}%\n"
-            f"- **Field curvature (focus z deviation):** {fc:.2f}um\n"
-            f"- Flat singlet metalens: limited FOV (coma). For wide FOV use a doublet/quadratic design.")
-    return figpath, body, f"half-FOV~{fov_half:.0f}°, at {amax:.0f}° FWHM={fw[-1]:.0f}nm rStrehl={rstrehl[-1]:.2f}"
+            f"- **Half-FOV (diffraction-limited):** ~{fov_half:.0f}° (FWHM≤1.5×diffraction & relative peak≥0.5"
+            f"{', angle-dependent atoms' if cmp else ''})\n"
+            f"- **At the max angle ({amax:.0f}°):** FWHM={fw[-1]:.0f}nm, relative peak={rstrehl[-1]:.2f}, distortion={dist[-1]:.1f}% "
+            f"(peak position on the FFT grid, step {d['L'] / 4 * 1000:.0f}nm)"
+            f"{' (fixed atom response)' if cmp else ''}\n"
+            f"- **Field curvature (focus z deviation):** {fc:.2f}um\n")
+    if cmp is not None:
+        body += (f"- **Angle-dependent atoms ({pol}):** at {amax:.0f}° relative peak {rs_a[-1]:.2f} (fixed response {rstrehl[-1]:.2f}), "
+                 f"FWHM {fw_a[-1]:.0f}nm, mean pillar transmission {cmp['mean_T'][-1]:.3f} (0°: {cmp['mean_T'][0]:.3f})\n")
+    else:
+        body += ("- Atom response assumed independent of the angle (normal-incidence library + tilt phase); "
+                 "use atom_angle=1 for the RCWA response at each angle.\n")
+    if a_sub is not None:
+        body += (f"- A first diffraction order of the period propagates in the substrate above {a_sub:.1f}°: "
+                 "the fixed-response model is optimistic there.\n")
+    body += "- Flat singlet metalens: limited FOV (coma). For wide FOV use a doublet/quadratic design."
+    return figpath, body, f"half-FOV~{fov_half:.0f}°, at {amax:.0f}° FWHM={fw[-1]:.0f}nm rel. peak={rstrehl[-1]:.2f}"
 
 
 def run_index_robustness(fm, slug):

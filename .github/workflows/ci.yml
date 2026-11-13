@@ -45,6 +45,9 @@ jobs:
       - name: Recipe pipeline tests (specification, trust level, reproducible end-to-end run)
         run: pytest tests/test_recipe_run.py
 
+      - name: Angle-dependent library tests (analytic thin film, grcwa cross-check)
+        run: pytest tests/test_angular.py
+
       - name: End-to-end tests (all 25 generators, CLI, note workflow)
         run: pytest tests/test_experiments.py
 

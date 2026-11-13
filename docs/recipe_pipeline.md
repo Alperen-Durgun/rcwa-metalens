@@ -43,6 +43,20 @@ specification is invalid (unknown key, missing value, wrong type or range - noth
 
 The report lists every requirement as met or not and names what the next level needs.
 
+## Off-axis performance (optional, roadmap P2)
+
+With `field_of_view: {angles_deg: [...], pol: TE}` in the specification, every pillar size the
+lens uses is solved again with RCWA at each field angle (`rcwa/angular.py`; the angle is in air
+before the substrate, the plane of incidence is x-z), and the report adds the off-axis spot on
+a flat sensor at the normal-incidence focus for two models: the angle-dependent atom response
+and the former fixed response (normal-incidence library plus tilt phase). The two agree as long
+as only the zeroth order propagates; for a period L a first diffraction order opens in the
+substrate above asin(lam0/L - n_sub) (13.4 deg for 633 nm, L = 375 nm, fused silica) and the fixed
+response becomes optimistic: for a D 10 / f 20 um lens of the 633 nm recipe the relative peak at
+20 deg is 0.786 instead of 0.893. The oblique solver is checked against an analytic thin-film
+transfer matrix (TE and TM, 0-35 deg, < 1e-10) and against grcwa (pillar, 20 deg). The off-axis
+numbers have no error budget: the full-wave model check (V2) was done at normal incidence.
+
 ## Error budget (roadmap T2)
 
 For every metric the budget lists six terms; each is the largest deviation from the nominal

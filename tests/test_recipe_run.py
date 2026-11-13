@@ -54,11 +54,20 @@ def test_spec_defaults_and_normalization():
     ({"search": {"height_um": [0.6], "period_um": [0.35]}}, "either unit_cell"),
     ({"unit_cell": {"shape": "star"}}, "unit_cell.shape"),
     ({"fabrication": {"residual": ["TiO2_Siefke"]}}, "residual must be"),
+    ({"field_of_view": {"angles_deg": [10, 95]}}, "angles_deg must be in [0, 90)"),
+    ({"field_of_view": {"angles_deg": [10], "pol": "XY"}}, "field_of_view.pol"),
+    ({"field_of_view": {"angles_deg": ["ten"]}}, "expected a number"),
 ])
 def test_spec_refuses_bad_input(changes, words):
     with pytest.raises(rr.SpecError) as e:
         rr.load_spec(_spec(**changes))
     assert words in str(e.value)
+
+
+def test_spec_field_of_view_normalized():
+    s = rr.load_spec(_spec(field_of_view={"angles_deg": [20, 10, 10]}))
+    assert s["field_of_view"] == {"angles_deg": [0.0, 10.0, 20.0], "pol": "TE"}      # 0 added, sorted, unique
+    assert rr.load_spec(BASE)["field_of_view"] == {"angles_deg": None, "pol": "TE"}
 
 
 def test_spec_from_yaml(tmp_path):

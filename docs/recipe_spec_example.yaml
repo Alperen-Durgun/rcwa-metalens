@@ -35,3 +35,7 @@ tolerance:
 numerics:
   M: 9                           # RCWA Fourier orders (half-number); certified against M + 2
   n_sizes: 20                    # initial library sweep before adaptive refinement
+
+# field_of_view:                 # optional: off-axis performance with the RCWA response of every
+#   angles_deg: [5, 10, 15, 20]  # used pillar size at each field angle (rcwa/angular.py); 0 is added
+#   pol: TE                      # TE (E along y) or TM; plane of incidence x-z

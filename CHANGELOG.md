@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### Added — angle-dependent atom library and off-axis analysis (roadmap P2)
+
+* `rcwa/angular.py`: `angle_library(lib, angles, pol)` solves pillar sizes with RCWA at oblique
+  incidence (field angle in air, substrate angle by Snell, plane x-z; TE: ty, TM: tx /
+  cos(theta_sub), i.e. tangential field out / in; cached); `orders_at` / `first_order_angle`
+  give the extra propagating diffraction orders; `fov_compare(d, angles)` gives the off-axis spot
+  with the angle-dependent response and with the former fixed response.
+* Checks: an oblique uniform film equals the analytic transfer matrix to < 1e-10 (TE, TM;
+  0, 20, 35 deg); theta = 0 equals the normal library bit for bit (TE); a TiO2 pillar at
+  20 deg agrees with grcwa in total transmission within 0.012 (measured 0.0070 at 20 deg,
+  0.0049 at 0 deg, raster 256); M 9 -> 11 changes T by about 1e-3.
+* Finding: the fixed-response assumption holds while only the zeroth order propagates; above
+  the angle where a first order enters the substrate (13.4 deg for 633 nm, L = 375 nm on
+  silica) it is optimistic. D 10 / f 20 um lens of the 633 nm recipe: relative peak 0.897
+  vs 0.960 at 15 deg and 0.786 vs 0.893 at 20 deg (mean pillar transmission 0.874 / 0.822).
+* `fov_analysis` has `atom_angle=1` (and `pol=`) for the RCWA response; by default it keeps the
+  fixed response and says so, and it marks the substrate-order angle. Recipe specifications
+  take an optional `field_of_view` section (report: off-axis table, marked as without error
+  budget because V2 was at normal incidence).
+
+### Fixed — distortion reference of the off-axis analysis
+
+* Distortion is now measured against z0 tan(theta) (chief ray on the sensor plane at the
+  normal-incidence focus z0) instead of f tan(theta). For lenses with a small Fresnel number
+  the focus lies well before f and the old reference reported a large spurious distortion
+  (D 4 / f 6 um at 20 deg: -29.2 % -> +8.8 %). The figure title of `fov_analysis` also shows the
+  material again. Peak positions are resolved to the FFT grid step L/4 (reported).
+
 ### Added — error budget on the predicted performance (roadmap T2)
 
 * `rcwa/budget.py`: for focus, FWHM, Strehl, absolute and relative efficiency, six terms - RCWA

@@ -52,6 +52,7 @@ SPEC_FIELDS = {
     "tolerance": {"sigma_nm": (float, 3.0, False), "bias_nm": (float, 4.0, False),
                   "index_dn": (float, 0.02, False), "n_trial": (int, 10, False), "seed": (int, 0, False)},
     "numerics": {"M": (int, 9, False), "n_sizes": (int, 20, False)},
+    "field_of_view": {"angles_deg": (list, None, False), "pol": (str, "TE", False)},
 }
 SHAPES = ("circle",)                             # roadmap U3 adds more
 
@@ -135,6 +136,13 @@ def load_spec(spec):
             se[key] = [_coerce(f"search.{key}[]", float, v) for v in se[key]]
             if min(se[key]) <= 0:
                 raise SpecError(f"search.{key} values must be > 0")
+    fv = s["field_of_view"]
+    if fv["angles_deg"] is not None:
+        fv["angles_deg"] = sorted({_coerce("field_of_view.angles_deg[]", float, v) for v in fv["angles_deg"]} | {0.0})
+        if not all(0.0 <= v < 90.0 for v in fv["angles_deg"]):
+            raise SpecError("field_of_view.angles_deg must be in [0, 90)")
+    if fv["pol"] not in ("TE", "TM"):
+        raise SpecError('field_of_view.pol must be "TE" or "TM"')
     res = s["fabrication"]["residual"]
     if res is not None:
         if len(res) != 2 or not isinstance(res[0], str) or isinstance(res[1], bool) \
@@ -409,6 +417,21 @@ def run_recipe(spec, out_dir, validation_dir="auto", n_jobs=None, log=print):
                           "error_budget": {k: bud[k] for k in ("terms", "total", "model", "complete", "gaps",
                                                                "model_not_measured", "settings", "nominal")}}
 
+    fv = spec["field_of_view"]
+    if fv["angles_deg"]:
+        log(f"  off-axis: RCWA at {len(fv['angles_deg']) - 1} oblique angles for {len(used)} sizes ({fv['pol']})")
+        from . import angular
+        cmp = angular.fov_compare(d, fv["angles_deg"], pol=fv["pol"], n_jobs=n_jobs)
+        al = cmp["alib"]
+        res["field_of_view"] = {"angles_deg": [float(x) for x in cmp["angles_deg"]], "pol": fv["pol"], "M": int(al["M"]),
+                                "sensor_z_um": cmp["z0"], "grid_step_um": float(L) / 4,
+                                "atoms": cmp["atoms"], "fixed": cmp["fixed"],
+                                "mean_T": cmp["mean_T"],
+                                "first_order_substrate_deg": al["first_order_substrate_deg"],
+                                "first_order_exit_deg": al["first_order_exit_deg"]}
+    else:
+        res["field_of_view"] = None
+
     log("[7/10] process window")
     sc = bud["scenarios"]; b = tol["bias_nm"]
 
@@ -570,6 +593,27 @@ def _budget_section(eb):
     return "\n".join(out)
 
 
+def _fov_section(fv):
+    out = [f"### Off-axis (field angles, {fv['pol']}, flat sensor at the normal-incidence focus z = {fv['sensor_z_um']:.3f} um)\n",
+           "| angle (deg) | mean pillar T | rel. peak, angle-dependent atoms | rel. peak, fixed response | "
+           "FWHM (nm), atoms | spot x (um), atoms | distortion (%) |", "|---|---|---|---|---|---|---|"]
+    for k, a in enumerate(fv["angles_deg"]):
+        A, F = fv["atoms"], fv["fixed"]
+        out.append(f"| {a:.1f} | {fv['mean_T'][k]:.3f} | {A['rel_peak'][k]:.3f} | {F['rel_peak'][k]:.3f} | "
+                   f"{A['fwhm'][k] * 1000:.0f} | {A['x_peak'][k]:.3f} | {A['distortion_pct'][k]:+.1f} |")
+    a_sub = fv["first_order_substrate_deg"]
+    out.append(f"\nAngle-dependent atoms: every used size solved with RCWA (M = {fv['M']}) at each angle (rcwa/angular.py); "
+               "fixed response: the normal-incidence library with the tilt phase only (the former assumption). "
+               "Relative peak = peak intensity / normal-incidence peak; spot position and distortion resolved to "
+               f"the FFT grid step {fv['grid_step_um'] * 1000:.0f} nm.")
+    if a_sub is not None:
+        out.append(f"A first diffraction order of the period propagates in the substrate above {a_sub:.1f} deg "
+                   "(reflected); its power is missing from the transmitted zeroth order.")
+    out.append("These off-axis numbers carry no error budget: the full-wave model check (V2) was done at normal "
+               "incidence only.\n")
+    return "\n".join(out)
+
+
 def _candidate_table(rows, chosen):
     out = ["| H (um) | L (um) | meets limits | coverage (x 2pi) | phase gap (rad) | deep resonances | robust FOM | note |",
            "|---|---|---|---|---|---|---|---|"]
@@ -659,6 +703,8 @@ def render_report(res):
         w("Error budget: **not computed**; the numbers above carry no error bars.\n")
     else:
         w(_budget_section(pf["error_budget"]))
+    if res.get("field_of_view"):
+        w(_fov_section(res["field_of_view"]))
     w("## R6 Process window\n")
     w("| size bias (nm) | focus (um) | FWHM (nm) | Strehl | abs. efficiency |\n|---|---|---|---|---|")
     for r in pw["size_bias"]:
