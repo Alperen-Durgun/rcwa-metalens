@@ -77,6 +77,28 @@ look bright. Fabrication errors of a few nm then push atoms onto it.
   library range are clamped to the end sizes; the fraction is reported (`out_of_range`).
 
 
+## Recipe search (unit cell)
+
+`rcwa.recipe.search_unit_cell` / the `recipe_search` generator scan pillar height H × period L
+for one material, wavelength and shape.
+
+* **Hard limits:** smallest pillar ≥ `min_feature`, smallest gap ≥ `min_gap`, aspect ratio
+  H / min(min_feature, min_gap) ≤ `max_aspect`, and a sub-wavelength period
+  L < λ / max(n_sub, n_bg) (no diffracted order at normal incidence). The defaults (60 nm,
+  60 nm, 15) are typical e-beam / ALD values, **not** a foundry rule set.
+* **Library:** sizes from `min_feature` to L − `min_gap`, refined (resonances located).
+* **Figure of merit:** the focal intensity of an ideal lens built from the library with the
+  robust rule, relative to a lossless perfect phase plate,
+  `FOM = (n_bg/n_sub) · |⟨E[t_k(φ)] e^(−iφ)⟩_φ|²` over uniformly distributed target phases
+  (`fom_nominal` without size error). It combines transmission, phase coverage and tolerance.
+  Analytic check: 36 equally spaced lossless phases give cos²(π/72).
+* **Recommendation:** the highest robust FOM among candidates whose largest phase gap is
+  ≤ π/4. A good FOM with a large phase gap still fails some target phases; both are reported.
+* Everything is the locally periodic approximation at normal incidence. Confirm the chosen
+  recipe with a unit-cell FDTD (`examples/17_unitcell_validation.py`).
+
+## Focal analysis and metric definitions
+
 `design.analyze_focus` propagates the cell-sampled aperture field with the angular-spectrum
 method (4 sub-samples per cell, zero-padded window) and reports:
 

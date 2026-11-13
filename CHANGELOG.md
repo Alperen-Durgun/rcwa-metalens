@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Recipes — unit-cell search (roadmap U1, U2)
+
+* `rcwa.recipe` and the `recipe_search` generator: height × period scan for a material and
+  wavelength under fabrication limits (min feature, min gap, aspect ratio) and the
+  sub-wavelength condition; each candidate library is refined and scored by a lens figure of
+  merit (focal efficiency of an ideal lens built from it with the robust rule; analytic check
+  cos²(π/72) for 36 ideal phases). `recipe.recommend` picks, among candidates that close the
+  phase circle (gap ≤ π/4) and are within 0.01 of the best FOM, the one with the fewest deep
+  resonances, then the highest NA the period can sample (λ/2L).
+* `examples/18_recipe_unitcell_validation.py`: FDTD check of any recipe (substrate incidence,
+  bare-interface reference, test sizes picked away from resonances).
+* **633 nm, ALD TiO₂ (Siefke), fused-silica substrate, limits 60 nm / 60 nm / aspect ≤ 15,
+  σ = 3 nm** (30 candidates, H 550–800 nm × L 300–400 nm): the current recipe H = 600 nm,
+  L = 350 nm does **not** close the phase circle with the measured film index (0.88 × 2π, gap
+  0.76 rad). Widening the period to 375 nm does (H = 600 nm: 1.05 × 2π, gap 0.30 rad, FOM 0.948,
+  two shallow resonances: the library never drops below |t| = 0.61). The highest FOM, 0.955 at H = 650 / L = 400 nm, comes
+  with three resonances, the deepest down to |t| = 0.006. The seven best candidates are within one FOM point.
+* Docs: restored the "Focal analysis and metric definitions" heading in `docs/conventions.md`
+  (lost in an earlier edit); new "Recipe search" section.
+
 ### Materials — sourced datasets (roadmap M1)
 
 * 15 refractiveindex.info files shipped unchanged in `rcwa/materials_data/rii/` (CC0 1.0,

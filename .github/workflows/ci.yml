@@ -42,7 +42,7 @@ jobs:
       - name: Unit tests (solvers, design core, GDS, materials)
         run: pytest tests/test_rcwa.py
 
-      - name: End-to-end tests (all 24 generators, CLI, note workflow)
+      - name: End-to-end tests (all 25 generators, CLI, note workflow)
         run: pytest tests/test_experiments.py
 
       - name: Benchmark suite (values must match benchmarks/baseline.json; times are reported only)

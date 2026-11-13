@@ -853,6 +853,38 @@ def test_rii_formulas_and_block_merging(tmp_path):
     m.register_rii("TEST_merged", str(f))
     assert abs(m.eps_of("TEST_merged", 0.85) - v ** 2) < 1e-14
 
+
+def test_recipe_fom_analytic_and_constraints():
+    """U1: for a lossless library with 36 equally spaced phases every one of the 72 target
+    phases is pi/72 from the nearest atom, so FOM = cos^2(pi/72) exactly; the substrate factor
+    n_bg/n_sub applies; half the phase circle gives (1/2 + 1/pi)^2. Hard limits are reported
+    without solving anything."""
+    from rcwa import recipe
+    s = np.arange(36) / 36.0
+    lib = {"sizes": s, "t": np.exp(2j * np.pi * s), "n_sub": 1.0, "n_bg": 1.0}
+    fr, fn = recipe.library_fom(lib, sigma_nm=1e-9)
+    assert abs(fn - np.cos(np.pi / 72) ** 2) < 1e-12 and abs(fr - fn) < 1e-9
+    assert abs(recipe.library_fom({**lib, "n_sub": 1.5}, sigma_nm=1e-9)[1] - fn / 1.5) < 1e-12
+    half = {"sizes": s, "t": np.exp(1j * np.pi * s), "n_sub": 1.0, "n_bg": 1.0}
+    # half circle: targets in the gap reach an end atom at mean cos = 2/pi -> FOM ~ (1/2 + 1/pi)^2
+    assert abs(recipe.library_fom(half, sigma_nm=1e-9)[1] - (0.5 + 1 / np.pi) ** 2) < 0.03
+    assert "diffraction" in recipe.evaluate_cell(0.633, 0.6, 0.45, n_sub=1.46)["reason"]
+    assert "aspect" in recipe.evaluate_cell(0.633, 1.2, 0.35, max_aspect=10)["reason"]
+    assert "size range" in recipe.evaluate_cell(0.633, 0.6, 0.11)["reason"]
+
+
+def test_recipe_recommendation_rule():
+    """U1: the recommendation ignores candidates with a phase gap, treats FOMs within `tie` as
+    equal, then prefers fewer deep resonances, then the higher sampled NA."""
+    from rcwa import recipe
+    mk = lambda H, L, f, g, nd, na: {"H": H, "L": L, "feasible": True, "fom_robust": f, "max_phase_gap": g,  # noqa: E731
+                                     "n_deep_resonances": nd, "na_max_sampling": na}
+    rows = [mk(0.65, 0.40, 0.955, 0.2, 3, 0.79), mk(0.60, 0.375, 0.948, 0.3, 0, 0.84),
+            mk(0.60, 0.35, 0.990, 1.0, 0, 0.90), mk(0.55, 0.30, 0.900, 0.2, 0, 0.99)]
+    assert recipe.recommend(rows)["L"] == 0.375               # 0.948 is within 0.01, no deep resonance
+    assert recipe.recommend(rows, tie=0.001)["L"] == 0.40     # strict tie: highest FOM wins
+    assert recipe.recommend([rows[2]]) is None               # only candidate leaves a phase gap
+
 if __name__ == "__main__":
     from rcwa.cli import utf8_stdio
     utf8_stdio()

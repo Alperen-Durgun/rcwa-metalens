@@ -19,13 +19,14 @@ meta-atom library ──► lens phase ──► atom selection ──► focal 
 
 | Area | What you get |
 |---|---|
-| **Solvers** | Full-vector 1D and 2D RCWA (S-matrix, Redheffer star product) with Li's Fourier factorization; scalar 1D solver with mirror-symmetry reduction; energy-gated automatic order selection |
-| **Materials** | Dispersive, absorbing materials (`n + ik`); `refractiveindex.info` YAML import; provenance and valid range for every dataset |
-| **Design core** | `rcwa.design`: library → hyperbolic phase → vectorized atom selection → angular-spectrum focal analysis, all in one convention |
+| **Solvers** | Full-vector 1D and 2D RCWA (S-matrix, Redheffer star product) with Li's Fourier factorization; automatic mirror-symmetry reduction of the 2D problem (same result, 7–10× faster); energy-gated order selection; convergence certificate |
+| **Materials** | Dispersive, absorbing materials (`n + ik`); 15 sourced datasets shipped (refractiveindex.info, CC0, with references); full YAML reader (formulas 1–5, merged n/k); no extrapolation |
+| **Design core** | `rcwa.design`: library (adaptively refined, resonances located) → hyperbolic phase → robust atom selection under a size error → angular-spectrum focal analysis; lens tolerance analysis |
+| **Recipes** | `rcwa.recipe` / `recipe_search`: height × period scan under fabrication limits (min feature, gap, aspect ratio) with a lens figure of merit and a production-minded recommendation |
 | **Metrics** | FWHM, absolute/relative focusing efficiency, Strehl (same-plane reference), MTF, encircled energy, sidelobe level, depth of focus, group delay |
 | **Fabrication** | Pure-Python GDS-II writer (works with non-ASCII Windows paths), hierarchical output (~36 bytes per pillar), tiled cm-scale lenses, design-rule check |
-| **Verification** | Bridges to Meep (local FDTD) and Tidy3D (cloud FDTD); grcwa cross-checks |
-| **Automation** | 24 experiment generators behind one command line; optional Markdown-note workflow (Obsidian friendly) |
+| **Verification** | Bridges to Meep (local FDTD) and Tidy3D (cloud FDTD); unit-cell FDTD validation scripts (`examples/17`, `18`); grcwa cross-checks; benchmark suite with a value baseline in CI |
+| **Automation** | 25 experiment generators behind one command line; optional Markdown-note workflow (Obsidian friendly) |
 
 ## Install
 
@@ -49,9 +50,10 @@ On Windows, `setup_env.bat` creates the environment, `run_tests.bat` runs the te
 ### Command line
 
 ```bash
-rcwa-metalens list                                   # the 24 experiment types
+rcwa-metalens list                                   # the 25 experiment types
 rcwa-metalens help metalens_design_full              # its parameters and defaults
 rcwa-metalens metalens_design_full D_lens=16 f=20 material=TiO2_t lam0=0.633
+rcwa-metalens recipe_search material=TiO2_Siefke lam0=0.633   # find H and L for a real film
 ```
 
 From a clone without installing, use `python metadesign.py …` with the same arguments.
@@ -167,6 +169,7 @@ of a small 3D lens (V2, `examples/16_lens_focus_fdtd.py`).
 `jones_matrix`, `pb_phase_library`, `param_map_2d`, `inverse_design_deflector`,
 `achromatic_analysis`, `achromatic_design`, `vortex_beam`, `hologram`,
 `polarization_multiplexed`, `metalens_design_full`, `tolerance_analysis`, `lens_tolerance`,
+`recipe_search`,
 `fov_analysis`,
 `index_robustness`, `metalens_large_tiled`.
 
@@ -186,7 +189,7 @@ rcwa/                     the package
   gds.py  gdswriter.py  largelens.py  exporting.py            GDS, tiled large lenses, DRC, BSDF
   fullwave.py  pipeline.py                                    Meep / Tidy3D / Zemax bridges
   adjoint.py  hiacc2d.py  backends.py                         adjoint design, grcwa bridge, GPU detection
-  experiments.py  cli.py                                      24 generators + command line
+  experiments.py  cli.py                                      25 generators + command line
 examples/                 19 Python scripts + 1 shell script (validation, libraries, Meep and Tidy3D runs)
 tests/                    test_rcwa.py (unit) · test_experiments.py (end to end)
 docs/conventions.md       conventions, metric definitions, accuracy guidance

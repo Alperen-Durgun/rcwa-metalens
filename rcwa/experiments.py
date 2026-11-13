@@ -995,6 +995,67 @@ def run_lens_tolerance(fm, slug):
     return figpath, body, ("tolerance ±%gnm: " % bmax) + ", ".join(f"{k} drop {v*100:.1f}pt" for k, v in drop.items())
 
 
+def run_recipe_search(fm, slug):
+    """UNIT-CELL RECIPE SEARCH: pillar height x lattice period for a material and wavelength under
+    fabrication limits (min feature, min gap, aspect ratio). Scores each refined library by the
+    focal efficiency of an ideal lens built from it with the robust rule (size error sigma)."""
+    from . import recipe
+    lam0 = num(fm, "lam0", 0.633); mat = fm.get("material", "TiO2_Siefke"); shape = fm.get("shape", "circle")
+    sub = fm.get("substrate", "SiO2_Malitson")
+    n_sub = float(np.real(np.sqrt(materials.eps_of(sub, lam0)))) if sub not in ("", "air", "none") else 1.0
+    Hs = np.linspace(num(fm, "H_min", 0.55), num(fm, "H_max", 0.80), int(num(fm, "n_H", 6, int)))
+    Ls = np.linspace(num(fm, "L_min", 0.30), num(fm, "L_max", 0.40), int(num(fm, "n_L", 5, int)))
+    kw = dict(material=mat, shape=shape, n_sub=n_sub, min_feature=num(fm, "min_feature", 0.06),
+              min_gap=num(fm, "min_gap", 0.06), max_aspect=num(fm, "max_aspect", 15.0),
+              M=int(num(fm, "M", 9, int)), n_sizes=int(num(fm, "n_sizes", 16, int)),
+              sigma_nm=num(fm, "sigma_nm", 3.0))
+    max_gap = num(fm, "max_phase_gap", float(np.pi / 4))
+    rows = recipe.search_unit_cell(lam0, Hs, Ls, **kw)
+    F = np.full((len(Hs), len(Ls)), np.nan)
+    for r in rows:
+        if r["feasible"]:
+            F[int(np.argmin(np.abs(Hs - r["H"]))), int(np.argmin(np.abs(Ls - r["L"])))] = r["fom_robust"]
+    best = recipe.recommend(rows, max_gap=max_gap, tie=num(fm, "fom_tie", 0.01))
+    fig, ax = plt.subplots(figsize=(7.2, 4.8))
+    hw = lambda v: 0.5 * (v[1] - v[0]) if len(v) > 1 else 0.005           # noqa: E731  half cell
+    im = ax.imshow(F, origin="lower", aspect="auto", cmap="viridis",
+                   extent=[(Ls[0] - hw(Ls)) * 1000, (Ls[-1] + hw(Ls)) * 1000,
+                           (Hs[0] - hw(Hs)) * 1000, (Hs[-1] + hw(Hs)) * 1000])
+    plt.colorbar(im, ax=ax, label="robust FOM (focal efficiency of an ideal lens)")
+    for r in rows:
+        if r["feasible"] and r["max_phase_gap"] > max_gap:
+            ax.plot(r["L"] * 1000, r["H"] * 1000, "x", color="w")
+    if best:
+        ax.plot(best["L"] * 1000, best["H"] * 1000, "*", color="r", ms=14, label="recommended")
+        ax.legend(loc="upper left")
+    ax.set_xlabel("period L (nm)"); ax.set_ylabel("height H (nm)")
+    ax.set_title(f"Recipe search — {mat}/{shape}, λ={lam0*1000:.0f} nm, substrate n={n_sub:.3f}  (x: phase gap > {max_gap:.2f} rad)")
+    figpath = _out(slug + ".png"); fig.tight_layout(); fig.savefig(figpath, dpi=130); plt.close(fig)
+    feas = [r for r in rows if r["feasible"]][:8]
+    tab = "".join(f"| {r['H']*1000:.0f} | {r['L']*1000:.0f} | {r['s_min']*1000:.0f}–{r['s_max']*1000:.0f} | {r['aspect']:.1f} | "
+                  f"{r['coverage_2pi']:.2f} | {r['max_phase_gap']:.2f} | {r['min_abs_t']:.2f} | "
+                  f"{', '.join(f'{c*1000:.0f} ({d:.2f})' for c, d in zip(r['resonances'], r['resonance_depth'])) or '—'} | "
+                  f"{r['na_max_sampling']:.2f} | {r['fom_nominal']:.3f} | **{r['fom_robust']:.3f}** |\n"
+                  for r in feas)
+    infeas = [r for r in rows if not r["feasible"]]
+    body = (f"- **Platform:** {mat} ({shape}) at λ = {lam0*1000:.0f} nm, substrate n = {n_sub:.3f} ({sub}), exit medium air\n"
+            f"- **Limits:** min feature {kw['min_feature']*1000:.0f} nm, min gap {kw['min_gap']*1000:.0f} nm, aspect ratio ≤ {kw['max_aspect']:g}; "
+            f"size error σ = {kw['sigma_nm']:g} nm; RCWA M = {kw['M']}\n"
+            + (f"- **Recommended:** H = {best['H']*1000:.0f} nm, L = {best['L']*1000:.0f} nm, sizes {best['s_min']*1000:.0f}–{best['s_max']*1000:.0f} nm "
+               f"— robust FOM {best['fom_robust']:.3f}, phase gap {best['max_phase_gap']:.2f} rad, "
+               f"{best['n_deep_resonances']} deep resonance(s), sampling allows NA ≤ {best['na_max_sampling']:.2f} "
+               f"(rule: within {num(fm, 'fom_tie', 0.01):.2f} of the best FOM, fewest deep resonances, then highest NA)\n" if best else
+               f"- **No candidate** closes the phase circle within {max_gap:.2f} rad under these limits: relax a limit or widen the scan.\n")
+            + "\n| H (nm) | L (nm) | sizes (nm) | aspect | coverage (2π) | max phase gap (rad) | min \\|t\\| | resonances nm (depth \\|t\\|) | max NA (λ/2L) | FOM nominal | FOM robust |\n"
+            "|---|---|---|---|---|---|---|---|---|---|---|\n" + tab
+            + (f"\n- Infeasible candidates: {len(infeas)} ({'; '.join(sorted(set(r['reason'] for r in infeas)))})\n" if infeas else "")
+            + "- FOM = focal intensity of an ideal lens from this library relative to a perfect phase plate; "
+              "locally periodic approximation, normal incidence. Verify the chosen recipe with FDTD (examples/17).")
+    summ = (f"recommended H={best['H']*1000:.0f}nm L={best['L']*1000:.0f}nm FOM {best['fom_robust']:.3f}" if best
+            else "no recipe closes the phase circle")
+    return figpath, body, summ
+
+
 def run_metalens_large_tiled(fm, slug):
     """cm-scale TILED large lens. Vectorized size selection (loop-free) +
     tile-by-tile GDS (bounded memory) + preview + cm-scale projection."""
@@ -1040,6 +1101,7 @@ RUNNERS = {"grating": run_grating, "metalens_library": run_metalens_library,
            "hologram": run_hologram, "polarization_multiplexed": run_polarization_multiplexed,
            "metalens_design_full": run_metalens_design_full, "tolerance_analysis": run_tolerance_analysis,
            "lens_tolerance": run_lens_tolerance,
+           "recipe_search": run_recipe_search,
            "fov_analysis": run_fov_analysis, "index_robustness": run_index_robustness,
            "metalens_large_tiled": run_metalens_large_tiled,
            "achromatic_design": run_achromatic_design}
