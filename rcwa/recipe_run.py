@@ -30,7 +30,7 @@ import platform as _platform
 import numpy as np
 
 from . import design as dz
-from . import materials, recipe
+from . import budget, materials, recipe
 from .exporting import drc_check, load_drc_profile
 
 SCHEMA = "rcwa-metalens-recipe/1"
@@ -251,26 +251,6 @@ def choose_unit_cell(spec, plat, drc, n_jobs=None, log=print):
     return rows, chosen
 
 
-def index_shift_metrics(d, dn, n_jobs=None):
-    """Lens metrics when the pillar film index is n0 + dn for every used size (selection fixed,
-    sizes re-solved with RCWA). Returns {dn: analyze_focus subset}."""
-    lib = d["lib"]; ins = d["inside"]
-    used = np.unique(np.round(d["size_map"][ins], 12))
-    out = {}
-    for s in dn:
-        t = dz.meta_atom_library(lib["lam0"], lib["L"], lib["H"], sizes=used, shape=lib["shape"],
-                                 material=None, n_pillar=complex(lib["n"]) + s, M=lib["M"],
-                                 n_sub=lib["n_sub"], n_bg=lib["n_bg"], raster_n=lib.get("raster_n"),
-                                 n_jobs=n_jobs, sidewall_deg=lib.get("sidewall_deg", 90.0),
-                                 n_steps=lib.get("n_steps"), residual=lib.get("residual"))["t"]
-        k = np.searchsorted(used, np.round(d["size_map"], 12))
-        E0 = np.where(ins, np.asarray(t)[np.clip(k, 0, len(used) - 1)], 0.0)
-        dd = dict(d); dd["E0"] = E0
-        a = dz.analyze_focus(dd, nz=NZ)
-        out[float(s)] = {k_: float(a[k_]) for k_ in ("z_focus", "fwhm", "strehl", "eff_absolute", "eff_relative")}
-    return out
-
-
 def find_validation_records(vdir, plat, lam0, H, L, sidewall_deg=90.0, residual=None):
     """Step 8 (R8): full-wave records in vdir that apply to this platform. A record applies when
     material, wavelength, pillar height, period and substrate index match; records do not store
@@ -310,8 +290,9 @@ def find_validation_records(vdir, plat, lam0, H, L, sidewall_deg=90.0, residual=
                          "n_judged": int(jm.sum()), "n_sizes": int(len(jm)), "fdtd_steps": rec.get("fdtd_steps")})
         else:
             lp, fd = rec.get("lpa", {}), rec.get("fdtd", {})
-            item.update({"D": rec.get("D"), "f": rec.get("f"), "steps": rec.get("steps"),
+            item.update({"D": rec.get("D"), "f": rec.get("f"), "steps": rec.get("steps"), "NA": lp.get("NA"),
                          "lpa_focus": lp.get("z_focus"), "fdtd_focus": fd.get("z_focus"),
+                         "lpa_fwhm": lp.get("fwhm_in_fdtd_plane"), "fdtd_fwhm": fd.get("fwhm"),
                          "lpa_eff_relative": lp.get("eff_relative_in_fdtd_plane", lp.get("eff_relative")),
                          "fdtd_eff_relative": fd.get("eff_relative")})
         out[kind].append(item)
@@ -412,35 +393,44 @@ def run_recipe(spec, out_dir, validation_dir="auto", n_jobs=None, log=print):
                      "sigma_nm": tol["sigma_nm"], "phase_offset_rad": float(d["offset"]),
                      "sizes_used_um": [float(s) for s in used]}
 
-    log("[6/10] performance (LPA)")
+    vrec = find_validation_records(validation_dir, plat, lam0, H, L, fab["sidewall_deg"], residual)
+    vrec["dir"] = os.path.relpath(validation_dir, pkg_root) if validation_dir else None
+
+    log("[6/10] performance (LPA) and error budget")
     a = dz.analyze_focus(d, nz=NZ)
+    bud = budget.error_budget(d, vrec["V2"], dn=tol["index_dn"], bias_nm=tol["bias_nm"], sigma_nm=tol["sigma_nm"],
+                              n_trial=tol["n_trial"], seed=tol["seed"], n_jobs=n_jobs)
+    assert all(abs(bud["nominal"][k] - float(a[k])) < 1e-12 for k in budget.METRICS)
     res["performance"] = {"model": "LPA + scalar Rayleigh-Sommerfeld / angular spectrum",
                           "z_focus_um": float(a["z_focus"]), "fwhm_um": float(a["fwhm"]),
                           "diffraction_fwhm_um": float(a["diffraction_fwhm"]), "strehl": float(a["strehl"]),
                           "eff_absolute": float(a["eff_absolute"]), "eff_relative": float(a["eff_relative"]),
-                          "fresnel_number": float(a["fresnel_number"]), "error_budget": None}
+                          "fresnel_number": float(a["fresnel_number"]),
+                          "error_budget": {k: bud[k] for k in ("terms", "total", "model", "complete", "gaps",
+                                                               "model_not_measured", "settings", "nominal")}}
 
     log("[7/10] process window")
-    b = tol["bias_nm"]
-    bias = dz.lens_tolerance(d, bias_nm=(-b, -b / 2, 0.0, b / 2, b), sigma_nm=0.0, nz=NZ)
-    rand = dz.lens_tolerance(d, bias_nm=(0.0,), sigma_nm=tol["sigma_nm"], n_trial=tol["n_trial"], seed=tol["seed"],
-                             nz=NZ) if tol["sigma_nm"] > 0 else None
-    idx = index_shift_metrics(d, (-tol["index_dn"], tol["index_dn"]), n_jobs=n_jobs)
+    sc = bud["scenarios"]; b = tol["bias_nm"]
+
+    def row(m):
+        return {"z_focus": m["z_focus"], "fwhm": m["fwhm"], "strehl": m["strehl"], "eff_absolute": m["eff_absolute"]}
     res["process_window"] = {
-        "size_bias": [{"bias_nm": float(x), "strehl": float(s), "eff_absolute": float(e)}
-                      for x, s, e in zip(bias["bias_nm"], bias["strehl"][:, 0], bias["eff"][:, 0])],
-        "size_bias_out_of_range": float(bias["out_of_range"]),
-        "random_size": None if rand is None else {
-            "sigma_nm": rand["sigma_nm"], "n_trial": rand["n_trial"], "seed": tol["seed"],
-            "strehl_mean": float(rand["strehl_stats"]["mean"][0]), "strehl_p10": float(rand["strehl_stats"]["p10"][0]),
-            "eff_mean": float(rand["eff_stats"]["mean"][0]), "eff_p10": float(rand["eff_stats"]["p10"][0])},
-        "index_shift": [{"dn": k, **v} for k, v in idx.items()],
+        "size_bias": [{"bias_nm": float(x), **row(bud["nominal"] if x == 0 else sc[f"bias_{x:+.1f}nm"])}
+                      for x in (-b, -b / 2, 0.0, b / 2, b)],
+        "size_bias_out_of_range": bud["out_of_range"],
+        "random_size": None if "random" not in sc else {
+            "sigma_nm": sc["random"]["sigma_nm"], "n_trial": sc["random"]["n_trial"], "seed": sc["random"]["seed"],
+            "strehl_mean": sc["random"]["mean"]["strehl"], "strehl_p10": sc["random"]["p10"]["strehl"],
+            "eff_mean": sc["random"]["mean"]["eff_absolute"], "eff_p10": sc["random"]["p10"]["eff_absolute"],
+            "focus_mean": sc["random"]["mean"]["z_focus"], "focus_std": sc["random"]["std"]["z_focus"]},
+        "index_shift": [{"dn": float(s_), **{k: sc[f"index_{s_:+.3f}"][k] for k in ("z_focus", "fwhm", "strehl",
+                                                                                   "eff_absolute", "eff_relative")}}
+                        for s_ in (-tol["index_dn"], tol["index_dn"])],
         "model": ("interpolated refined library for size errors; RCWA re-solve of the used sizes for the "
                   "index (pillar index only; a residual film keeps its index)")}
 
     log("[8/10] validation records")
-    res["validation"] = find_validation_records(validation_dir, plat, lam0, H, L, fab["sidewall_deg"], residual)
-    res["validation"]["dir"] = os.path.relpath(validation_dir, pkg_root) if validation_dir else None
+    res["validation"] = vrec
 
     log("[9/10] fabrication files")
     gds_path = os.path.join(out_dir, "lens.gds")
@@ -466,7 +456,7 @@ def run_recipe(spec, out_dir, validation_dir="auto", n_jobs=None, log=print):
               "process_window": True, "drc_clean": bool(rule["ok"]),
               "unit_cell_fullwave": any(r["passed"] for r in res["validation"]["V1"]),
               "lens_fullwave": any(r["passed"] for r in res["validation"]["V2"]),
-              "error_budget": res["performance"]["error_budget"] is not None}
+              "error_budget": bool(bud["complete"])}
     level, missing = trust_level(checks)
     res["trust"] = {"level": level, "checks": checks, "next_level_needs": missing}
     res["status"] = "ok"
@@ -518,6 +508,56 @@ def _finish(res, spec, out_dir, validation_dir, pkg_root, log):
 # --------------------------------------------------------------------------- report
 def _f(x, nd=3):
     return "n/a" if x is None else f"{x:.{nd}f}"
+
+
+_BUDGET_COLS = [("numerical_rcwa", "RCWA M+2"), ("numerical_prop", "FFT window"), ("material", "film index"),
+                ("fabrication_bias", "size bias"), ("fabrication_random", "random size"), ("model", "model (V2)")]
+_METRIC_ROWS = [("z_focus", "focus", "um", 1.0), ("fwhm", "FWHM", "nm", 1000.0), ("strehl", "Strehl", "", 1.0),
+                ("eff_absolute", "abs. efficiency", "", 1.0), ("eff_relative", "rel. efficiency", "", 1.0)]
+
+
+def _budget_section(eb):
+    """Error-budget table (roadmap T2) for the report."""
+    out = ["### Error budget (T2)\n",
+           "Each term is the largest deviation from the nominal value over its scenarios (half-width of a range, "
+           "not a standard deviation); total = root sum of squares (independent terms), worst case = linear sum.\n",
+           "| metric | nominal | " + " | ".join(c for _, c in _BUDGET_COLS) + " | total (RSS) | worst case |",
+           "|---|---|" + "---|" * len(_BUDGET_COLS) + "---|---|"]
+    for key, name, unit, sc in _METRIC_ROWS:
+        cells = []
+        for col, _ in _BUDGET_COLS:
+            t = eb["terms"].get(col)
+            v = None if t is None else t.get(key)
+            cells.append("not measured" if (col == "model" and v is None and eb["model"] is not None)
+                         else "unknown" if v is None else f"{v * sc:.3f}" if unit != "nm" else f"{v * sc:.1f}")
+        tot = eb["total"][key]
+        fmt = (lambda v: f"{v * sc:.1f}") if unit == "nm" else (lambda v: f"{v * sc:.3f}")
+        out.append(f"| {name}{' (' + unit + ')' if unit else ''} | {fmt(eb['nominal'][key])} | " + " | ".join(cells)
+                   + f" | {fmt(tot['rss'])} | {fmt(tot['linear'])} |")
+    st = eb["settings"]
+    out.append(f"\nScenarios: RCWA M = {st['M_check'] - 2} vs {st['M_check']}; FFT window pad {st['fft_pad_check']:.0f}; "
+               f"film index +-{st['dn']}; size bias +-{st['bias_nm']} and +-{st['bias_nm'] / 2} nm; random size error "
+               f"sigma {st['sigma_nm']} nm ({st['n_trial']} trials, seed {st['seed']}).")
+    m = eb["model"]
+    if m is not None:
+        parts = []
+        for key, name, _, _ in _METRIC_ROWS:
+            mm = m["metrics"].get(key)
+            if mm:
+                parts.append(f"{name} {mm['mean_signed'] * 100:+.1f} %" if mm["relative"] else f"{name} {mm['mean_signed']:+.3f}")
+        out.append(f"Model term from {', '.join(f'`{x}`' for x in m['files'])} (lens NA {m['record_NA']:.3f} >= this lens): "
+                   f"mean FDTD - LPA: {'; '.join(parts)}. The sign is systematic (the real lens focuses slightly "
+                   "closer and is slightly less efficient than predicted); the budget uses the largest magnitude.")
+        if eb["model_not_measured"]:
+            out.append("No FDTD comparison exists for " + ", ".join(eb["model_not_measured"]) + ": their model term is not measured.")
+    for g in eb["gaps"]:
+        out.append(f"Gap: {g}.")
+    lower = [name for key, name, _, _ in _METRIC_ROWS if eb["terms"]["model"].get(key) is None]
+    if lower:
+        out.append("**The totals of " + ", ".join(lower) + " leave out the model term (unknown or not measured): "
+                   "they are lower bounds of the uncertainty, not estimates of it.**")
+    out.append(f"\nBudget complete for trust level T2: {'yes' if eb['complete'] else '**no**'}.\n")
+    return "\n".join(out)
 
 
 def _candidate_table(rows, chosen):
@@ -604,16 +644,20 @@ def render_report(res):
     w(f"| {pf['z_focus_um']:.3f} | {pf['fwhm_um']*1000:.0f} | {pf['diffraction_fwhm_um']*1000:.0f} | "
       f"{pf['strehl']:.3f} | {pf['eff_absolute']:.3f} | {pf['eff_relative']:.3f} |")
     w(f"\nFresnel number {pf['fresnel_number']:.2f}" + (" (small: the intensity maximum lies before f)" if pf["fresnel_number"] < 5 else "") + ".")
+    w("")
     if pf["error_budget"] is None:
-        w("Error budget: **not computed** (roadmap T2); the numbers above carry no error bars yet.\n")
+        w("Error budget: **not computed**; the numbers above carry no error bars.\n")
+    else:
+        w(_budget_section(pf["error_budget"]))
     w("## R6 Process window\n")
-    w("| size bias (nm) | Strehl | abs. efficiency |\n|---|---|---|")
+    w("| size bias (nm) | focus (um) | FWHM (nm) | Strehl | abs. efficiency |\n|---|---|---|---|---|")
     for r in pw["size_bias"]:
-        w(f"| {r['bias_nm']:+.1f} | {r['strehl']:.3f} | {r['eff_absolute']:.3f} |")
+        w(f"| {r['bias_nm']:+.1f} | {r['z_focus']:.3f} | {r['fwhm']*1000:.0f} | {r['strehl']:.3f} | {r['eff_absolute']:.3f} |")
     if pw["random_size"]:
         rr = pw["random_size"]
-        w(f"\nRandom size error sigma = {rr['sigma_nm']} nm ({rr['n_trial']} trials, seed {rr['seed']}): Strehl mean "
-          f"{rr['strehl_mean']:.3f} (p10 {rr['strehl_p10']:.3f}), efficiency mean {rr['eff_mean']:.3f} (p10 {rr['eff_p10']:.3f}).")
+        w(f"\nRandom size error sigma = {rr['sigma_nm']} nm ({rr['n_trial']} trials, seed {rr['seed']}): focus "
+          f"{rr['focus_mean']:.3f} +- {rr['focus_std']:.3f} um, Strehl mean {rr['strehl_mean']:.3f} (p10 {rr['strehl_p10']:.3f}), "
+          f"efficiency mean {rr['eff_mean']:.3f} (p10 {rr['eff_p10']:.3f}).")
     w("\n| film index shift dn | focus (um) | Strehl | abs. efficiency |\n|---|---|---|---|")
     for r in pw["index_shift"]:
         w(f"| {r['dn']:+.3f} | {r['z_focus']:.3f} | {r['strehl']:.3f} | {r['eff_absolute']:.3f} |")

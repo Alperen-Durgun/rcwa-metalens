@@ -26,8 +26,8 @@ specification is invalid (unknown key, missing value, wrong type or range - noth
 | 3 Unit cell | the fixed cell, or every cell of the search, is checked against the DRC profile (min feature, min gap, aspect ratio), the sub-wavelength condition and the lens NA (L <= lam0 / 2NA); feasible cells get a refined, certified library and a robust figure of merit; `recipe.recommend` chooses | R2 |
 | 4 Library | refined adaptively (resonances located), convergence certificate M vs M+2 on every size; sizes that fail are not used | R3 |
 | 5 Lens design | hyperbolic phase, robust atom selection for the stated size error, from certified sizes only | R4 |
-| 6 Performance | focal analysis (`design.analyze_focus`): focus, FWHM, Strehl, absolute and relative efficiency | R5 |
-| 7 Process window | uniform size bias (+-bias, +-bias/2), random size error (Monte Carlo), film index +-dn (used sizes re-solved with RCWA) | R6 |
+| 6 Performance | focal analysis (`design.analyze_focus`): focus, FWHM, Strehl, absolute and relative efficiency, each with an error budget (`rcwa/budget.py`) | R5 |
+| 7 Process window | the budget scenarios in table form: uniform size bias (+-bias, +-bias/2), random size error (Monte Carlo), film index +-dn (used sizes re-solved with RCWA) | R6 |
 | 8 Validation | full-wave records in `validation/` that match material, wavelength, H, L and substrate | R8 |
 | 9 Fabrication | GDS written and read back, DRC against the named profile including aspect ratio | R7 |
 | 10 Report | trust level with the checklist behind it; manifest | R9, R10 |
@@ -38,10 +38,32 @@ specification is invalid (unknown key, missing value, wrong type or range - noth
 |---|---|
 | T0 | - |
 | T1 | material data from a cited source (shipped dataset or your registered measurement; the approximate built-in tables do not count); every size the lens uses passes the convergence certificate; refined library; robust selection; process window evaluated; DRC clean |
-| T2 | T1 + a passed unit-cell FDTD record (V1) and a passed small-lens FDTD record (V2) for this platform + an error budget on the performance numbers |
+| T2 | T1 + a passed unit-cell FDTD record (V1) and a passed small-lens FDTD record (V2) for this platform + a complete error budget (all terms evaluated, model term measured for focus, FWHM and relative efficiency at an NA at least the lens NA) |
 | T3 | T2 + calibration with fabrication data (SEM sizes, measured optics; roadmap F4) - never assigned by the pipeline |
 
 The report lists every requirement as met or not and names what the next level needs.
+
+## Error budget (roadmap T2)
+
+For every metric the budget lists six terms; each is the largest deviation from the nominal
+prediction over its scenarios:
+
+| Term | Scenarios |
+|---|---|
+| RCWA M+2 | the sizes the lens uses re-solved with M + 2 Fourier orders |
+| FFT window | focal-plane metrics with an FFT window twice as large (on-axis values are exact: 0) |
+| film index | pillar index n0 +- dn, used sizes re-solved with RCWA |
+| size bias | uniform size bias +-b and +-b/2 |
+| random size | random size error sigma per pillar: mean shift + 1 standard deviation over the trials |
+| model (V2) | the largest FDTD - LPA difference in the platform's small-lens records whose NA is at least the lens NA |
+
+Terms are half-widths of ranges, not standard deviations. The total is their root sum of
+squares (independent terms); the worst case is their sum. The small-lens records measured
+focus, FWHM and relative efficiency; Strehl and absolute efficiency have no model term, and
+their totals are flagged as lower bounds. If no record covers the lens NA (the LPA error grows
+with NA) the model term is unknown, all totals are lower bounds, and the recipe stays at T1.
+The model term has a sign: for the 633 nm TiO2 platform the FDTD focus is 2-3 % shorter and
+the relative efficiency 2-3 points lower than predicted.
 
 ## What the numbers mean
 

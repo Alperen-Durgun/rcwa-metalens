@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Added — error budget on the predicted performance (roadmap T2)
+
+* `rcwa/budget.py`: for focus, FWHM, Strehl, absolute and relative efficiency, six terms - RCWA
+  M vs M+2 (used sizes re-solved), FFT window doubled, film index +-dn, uniform size bias
+  +-b and +-b/2, random size error (mean shift + 1 std), and the model term (largest
+  FDTD - LPA difference of the platform's V2 records whose NA covers the lens). Totals: root
+  sum of squares and linear sum. Strehl and absolute efficiency have no measured model term;
+  their totals are flagged as lower bounds, and so are all totals when no record covers the NA.
+* Recipe reports show the budget table in R5; the process window (R6) is built from the same
+  scenarios and now also lists focus and FWHM. A complete budget is the last requirement of
+  T2: recipes of the 633 nm TiO2 platform at NA <= 0.452 are now **T2**; at higher NA they stay
+  T1 ("no V2 record covers NA ...").
+* Example (V2 lens D 6 / f 6 um): focus 5.167 +- 0.172 um (RSS; model term 0.159 um of it),
+  FWHM 646 +- 23 nm, relative efficiency 0.927 +- 0.030; the model term is systematic
+  (mean FDTD - LPA: focus -2.6 %, FWHM -2.5 %, relative efficiency -0.024).
+* Tests: model-term rules, budget totals, a T2 run against the repository records.
+
 ### Added — one-command recipe with manifest and trust level (roadmap S1-S3)
 
 * `rcwa-metalens recipe spec.yaml [--out DIR] [--jobs N]` (`rcwa/recipe_run.py`,
@@ -17,8 +34,7 @@
   read back; DRC with aspect ratio. An infeasible specification gives a report with the
   reason (exit code 3).
 * Trust level T0-T2 from an explicit checklist (plan section 7); T3 needs fabrication data
-  and is never assigned. T2 also needs an error budget (roadmap T2, next), so recipes are T1
-  for now.
+  and is never assigned. T2 also needs a complete error budget (see the T2 entry above).
 * Reproducibility checked: byte-identical `report.md`, `recipe.json`, `lens.gds` with a warm
   and an empty library cache and with 1 and 2 worker processes. `gds.layout_to_gds` and
   `gdswriter.write_gds` take `timestamp=` (default unchanged: now).

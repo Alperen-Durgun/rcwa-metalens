@@ -184,7 +184,10 @@ def test_recipe_end_to_end_is_reproducible(tmp_path):
     p = a["performance"]
     assert 0.6 * 6.0 < p["z_focus_um"] < 6.2 and 0.5 < p["strehl"] <= 1.0 and 0.5 < p["eff_absolute"] < 1.0
     rep = (tmp_path / "a" / "report.md").read_text(encoding="utf-8")
-    assert "Trust level: **T1**" in rep and "not computed" in rep and "No full-wave record" in rep
+    assert "Trust level: **T1**" in rep and "No full-wave record" in rep
+    assert "Budget complete for trust level T2: **no**" in rep and "model term unknown" in rep
+    eb = a["performance"]["error_budget"]
+    assert not eb["complete"] and eb["model"] is None and all(v is None for v in eb["terms"]["model"].values())
     man = json.loads((tmp_path / "a" / "manifest.json").read_text(encoding="utf-8"))
     assert man["schema"] == rr.SCHEMA and man["spec_sha256"] == rr._sha256_json(rr.load_spec(BASE))
     assert set(man["outputs"]) == {"lens.gds", "recipe.json", "report.md"}
@@ -205,3 +208,47 @@ def test_recipe_without_size_error_is_nominal_and_t0(tmp_path):
     assert r["process_window"]["random_size"] is None
     assert r["trust"]["level"] == "T0" and r["trust"]["next_level_needs"] == ["robust_selection"]
     assert "nominal (complex match" in (tmp_path / "n" / "report.md").read_text(encoding="utf-8")
+
+
+def test_model_term_from_v2_records():
+    from rcwa import budget
+    recs = [{"file": "a", "NA": 0.447, "lpa_focus": 5.0, "fdtd_focus": 4.9, "lpa_fwhm": 0.65, "fdtd_fwhm": 0.63,
+             "lpa_eff_relative": 0.93, "fdtd_eff_relative": 0.90},
+            {"file": "b", "NA": 0.452, "lpa_focus": 9.0, "fdtd_focus": 8.73, "lpa_fwhm": None, "fdtd_fwhm": 0.7,
+             "lpa_eff_relative": 0.93, "fdtd_eff_relative": 0.91}]
+    m = budget.model_term(recs, 0.30)
+    assert m["files"] == ["a", "b"] and m["record_NA"] == 0.452
+    assert m["metrics"]["z_focus"]["max_abs"] == pytest.approx(0.03) and m["metrics"]["z_focus"]["relative"]
+    assert m["metrics"]["z_focus"]["mean_signed"] == pytest.approx(-0.025)
+    assert m["metrics"]["fwhm"]["n"] == 1 and m["metrics"]["fwhm"]["max_abs"] == pytest.approx(0.02 / 0.65)
+    assert m["metrics"]["eff_relative"]["max_abs"] == pytest.approx(0.03) and not m["metrics"]["eff_relative"]["relative"]
+    assert budget.model_term(recs, 0.45)["files"] == ["b"]                 # NA 0.447 does not cover 0.45
+    assert budget.model_term(recs, 0.60) is None                           # no record covers a higher NA
+    assert budget.model_term([], 0.3) is None
+
+
+def test_recipe_with_repository_records_reaches_t2(tmp_path):
+    """With the repository's validation records (633 nm TiO2 platform: V1 passed, V2 D 6 passed)
+    and a complete error budget the recipe is T2; the budget numbers are consistent."""
+    vdir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "validation")
+    r = rr.run_recipe(BASE, str(tmp_path / "t2"), validation_dir=vdir, log=lambda *a: None)
+    assert r["trust"]["level"] == "T2", r["trust"]
+    assert r["trust"]["next_level_needs"][0].startswith("fabrication_calibration")
+    eb = r["performance"]["error_budget"]
+    assert eb["complete"] and eb["gaps"] == [] and set(eb["model_not_measured"]) == {"strehl", "eff_absolute"}
+    for k in ("z_focus", "fwhm", "strehl", "eff_absolute", "eff_relative"):
+        vals = [t[k] for t in eb["terms"].values() if t is not None and t.get(k) is not None]
+        assert eb["total"][k]["rss"] == pytest.approx(np.sqrt(np.sum(np.square(vals))), rel=1e-12)
+        assert eb["total"][k]["linear"] == pytest.approx(np.sum(vals), rel=1e-12)
+        assert eb["nominal"][k] == pytest.approx(r["performance"][k if k.startswith("eff") or k == "strehl"
+                                                                   else {"z_focus": "z_focus_um", "fwhm": "fwhm_um"}[k]])
+    assert eb["terms"]["numerical_prop"]["z_focus"] == 0.0 and eb["terms"]["numerical_prop"]["strehl"] == 0.0
+    nom = eb["nominal"]; pw = r["process_window"]
+    worst = max(abs(row["eff_absolute"] - nom["eff_absolute"]) for row in pw["size_bias"])
+    assert eb["terms"]["fabrication_bias"]["eff_absolute"] == pytest.approx(worst, abs=1e-12)
+    # the model term is the largest measured |FDTD - LPA| of the platform's V2 records, applied to this lens
+    v2 = [x for x in r["validation"]["V2"]]
+    rel = max(abs(x["fdtd_focus"] - x["lpa_focus"]) / x["lpa_focus"] for x in v2)
+    assert eb["terms"]["model"]["z_focus"] == pytest.approx(rel * nom["z_focus"], rel=1e-12)
+    rep = (tmp_path / "t2" / "report.md").read_text(encoding="utf-8")
+    assert "Trust level: **T2**" in rep and "Budget complete for trust level T2: yes" in rep and "not measured" in rep

@@ -68,7 +68,7 @@ rcwa-metalens recipe docs/recipe_spec_example.yaml --out recipes/lens633
 ```
 
 writes `report.md` (platform, unit cell, certified library, design, performance, process
-window, validation records, DRC; trust level T0-T2 first), `recipe.json`, `lens.gds` and a
+window, error budget, validation records, DRC; trust level T0-T2 first), `recipe.json`, `lens.gds` and a
 `manifest.json` with the hashes of inputs and outputs. Same specification and code give
 byte-identical files. See [docs/recipe_pipeline.md](docs/recipe_pipeline.md).
 
