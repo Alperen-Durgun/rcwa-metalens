@@ -310,15 +310,16 @@ def test_square_pillars_are_polarization_independent():
 
 def test_square_recipe_end_to_end(tmp_path):
     """A square-pillar recipe runs through the pipeline: certified library, DRC clean, GDS read back,
-    no circular-pillar record is taken for it, and the report flags the unmodelled corner rounding."""
+    only square-pillar records are taken for it, and the report flags the unmodelled corner rounding."""
     s = _spec(unit_cell={"shape": "square", "height_um": 0.60, "period_um": 0.375})
     vdir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "validation")
     r = rr.run_recipe(s, str(tmp_path / "sq"), validation_dir=vdir, log=lambda *a: None)
-    assert r["status"] == "ok" and r["trust"]["level"] == "T1"
-    # only square records apply: the unit-cell FDTD record (40 steps) yes, no square lens record yet
-    assert all("square" in x["file"] for x in r["validation"]["V1"]) and r["validation"]["V2"] == []
-    assert r["trust"]["checks"]["unit_cell_fullwave"] == any(x["passed"] for x in r["validation"]["V1"])
-    assert "lens_fullwave" in r["trust"]["next_level_needs"] and "error_budget" in r["trust"]["next_level_needs"]
+    # only square records apply (no circular-pillar record is taken): the unit-cell record (40 steps)
+    # and the small-lens grid-convergence pair (25 and 35 steps), so the recipe reaches T2
+    assert r["validation"]["V1"] and all("square" in x["file"] for x in r["validation"]["V1"])
+    assert len(r["validation"]["V2"]) == 2 and all("square" in x["file"] for x in r["validation"]["V2"])
+    assert r["trust"]["checks"]["unit_cell_fullwave"] and r["trust"]["checks"]["lens_fullwave"]
+    assert r["status"] == "ok" and r["trust"]["level"] == "T2"
     assert r["library"]["certificate"]["used_sizes_certified"] and r["fabrication"]["drc"]["ok"]
     if r["fabrication"]["gds_readback"] is not None:
         assert r["fabrication"]["gds_readback"]["matches"]

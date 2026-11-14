@@ -96,7 +96,9 @@ covers the whole aperture.
   the focus 2-3 % beyond the FDTD focus, both FWHMs within 1.5-3.5 %, and the relative efficiency
   (power flow) 5.7-8.0 points above it: the real lenses scatter more light to wide angles (the
   FDTD focal monitor holds 92-93 % of the transmitted power, the LPA prediction 96-97 %). See the
-  R8 section of a report.
+  R8 section of a report. Square pillars on the same platform have their own records (unit cell
+  at 40 steps; D 6 / f 6 lens at 25 and 35 steps, grid-converged to 0.4 % in focus): focus 1.8-2.1 %
+  beyond the FDTD focus, FWHM 1.5-4.3 % wider, relative efficiency 5.5-7.0 points above it.
 * The validation records validate the *platform* (material, wavelength, H, L, substrate), not
   the particular lens of a recipe. They exist for vertical pillars without a residual film; a
   recipe with a tapered sidewall or a residual film has no applicable record.

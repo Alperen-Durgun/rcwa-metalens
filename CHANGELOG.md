@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Added — small-lens FDTD validation for square pillars (V2, grid-convergence pair)
+
+* Example 20 with `--shape square`, the D 6 / f 6 um lens (NA 0.447) of the 633 nm TiO2 600/375
+  platform, run at 25 and 35 FDTD steps per wavelength (`--tag s25`, `--tag s35`; new option so
+  the two runs keep separate files). Both PASSED. LPA vs FDTD (25 / 35 steps): focus 5.194 vs
+  5.082 / 5.102 um (-2.1 / -1.8 %), FWHM perpendicular 648 vs 622 / 621 nm (-4.1 / -4.3 %),
+  FWHM parallel 678 vs 669 / 668 nm, relative efficiency (S_z) 0.918 vs 0.849 / 0.863. The finer
+  grid moves the focus by 0.4 %, the FWHMs by 1 nm and the efficiency by 1.4 points: the
+  comparison is grid-converged at this level. Fields decayed below 1e-5 in both runs.
+  Estimated cost 1.795 + 6.301 FC.
+* Records `validation/V2_lens_D6_f6_square_s{25,35}_TiO2_Siefke_2026-11-15.json`. Both are used
+  by the model term (largest deviation over the records, so the coarser grid makes it
+  conservative): focus 2.2 %, FWHM 4.3 %, FWHM parallel 1.5 %, relative efficiency 7.0 points.
+* Square-pillar recipes of this platform with NA <= 0.447 now reach T2 (the example
+  specification with `shape: square`: T2, budget complete). Corner rounding is still not
+  modelled and the report keeps saying so; the FDTD runs, like RCWA, use sharp corners.
+
 ### Changed — example 18: robust constant-phase fit
 
 * The constant phase between RCWA and FDTD is fitted on the judged sizes; a size that fails on
