@@ -33,6 +33,7 @@ FAST = {
     "index_robustness": {"D_lens": 4.0, "f": 6.0, "M": 4, "n_dn": 3, "dn_max": 0.1},
     "metalens_large_tiled": {"D_lens": 15.0, "f": 20.0, "M": 4, "tile_cells": 30},
     "achromatic_design": {"D_lens": 4.0, "f": 8.0, "band": 0.06, "n_size": 3, "n_h": 2, "M": 4},
+    "recipe": {"D_lens": 4.0, "f": 6.0, "n_trial": 2},
 }
 
 
@@ -160,3 +161,29 @@ if __name__ == "__main__":
     for _name, _fn in _tests:
         _t = time.time(); _fn(); print(f"{_name}: PASSED  [{time.time() - _t:.1f}s]")
     print(f"All {len(_tests)} tests passed ✅")
+
+
+def test_recipe_note_has_trust_level_and_full_report():
+    """deney_tipi: recipe runs the recipe pipeline from flat front matter; the report note carries
+    the trust level, the budget table and the full report; the folder stays outside the vault."""
+    body, summary = _run("recipe")
+    assert "Trust level: T" in body and "| relative efficiency |" in body and "### Full recipe report" in body
+    assert "##### R9 Trust level" in body and "\n## Recipe" not in body    # report headings moved below the note sections
+    assert os.path.isfile(os.path.join(R.RECIPE_DIR, "T_recipe", "lens.gds")) and R.RECIPE_DIR.startswith(_TMP)
+    assert summary.startswith("ok, trust T")
+
+
+def test_recipe_spec_from_front_matter():
+    s = R._recipe_spec({"D_lens": "10", "f": "20", "fov_angles": "[5, 10]", "sigma_nm": "2"}, "x")
+    assert s["lens"] == {"diameter_um": 10.0, "focal_um": 20.0} and s["unit_cell"]["period_um"] == R.RECIPE["period"]
+    assert s["field_of_view"]["angles_deg"] == [5.0, 10.0] and s["tolerance"] == {"sigma_nm": 2.0}
+    from rcwa.recipe_run import load_spec
+    load_spec(s)                                             # a valid specification
+
+
+def test_project_dir_vault_names(tmp_path, monkeypatch):
+    """$RCWA_PROJECT_DIR pointing at a vault project folder (has Deneyler/) uses its folder names."""
+    (tmp_path / "Deneyler").mkdir()
+    monkeypatch.setenv("RCWA_PROJECT_DIR", str(tmp_path))
+    root, dn, rp, sim = R.project_dirs()
+    assert (dn, rp, sim) == tuple(str(tmp_path / n) for n in ("Deneyler", "Raporlar", "Simulasyonlar"))

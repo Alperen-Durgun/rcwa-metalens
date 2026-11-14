@@ -110,3 +110,33 @@ covers the whole aperture.
 * Reproducibility: the same specification, code commit and environment give byte-identical
   `report.md`, `recipe.json` and `lens.gds` (checked with a warm and an empty library cache and
   with 1 and 2 worker processes). `manifest.json` differs only in `created_utc`.
+
+## From a request note (experiment loop, Obsidian)
+
+The note workflow (`run_experiment.py`, see `rcwa/experiments.py`) has an experiment type
+`recipe` that runs this pipeline from the flat front matter of a note:
+
+```yaml
+---
+deney_tipi: recipe          # or experiment_type: recipe
+durum: 🔬 bekliyor          # or status: pending
+lam0: 0.633
+material: TiO2_Siefke       # optional, default TiO2_Siefke on SiO2_Malitson
+D_lens: 10
+f: 20
+# height / period: optional, default the validated cell 0.60 / 0.375 um
+# shape, substrate, drc_profile, sidewall_deg, sigma_nm, bias_nm, index_dn, n_trial, seed,
+# M, n_sizes, fov_angles ("5, 10, 15"), fov_pol, jobs: optional, as in the specification
+---
+```
+
+The report note gets the status, the trust level, the performance table with its budget
+(totals flagged as lower bounds where a term is missing), the location of the recipe folder and
+the full `report.md`; a figure shows the certified library with the sizes used and the
+efficiencies with their budget. With the notes in an Obsidian vault the recipe folder is
+written next to the code (`recipes/<note name>/`, not committed), so the vault holds one report
+note and no second `report.md`.
+
+`$RCWA_PROJECT_DIR` may point at a vault project folder (one with `Deneyler/`): its folder names
+(`Deneyler/`, `Raporlar/`, `Simulasyonlar/`) are then used, so the code can live outside the vault
+and a launcher in the vault sets the variable for the run.

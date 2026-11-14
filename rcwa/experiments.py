@@ -44,7 +44,9 @@ def _substrate_index(fm, lam0):
 def project_dirs():
     """Where experiment notes, reports and figures/GDS live -> (root, experiments, reports, outputs).
 
-    1) $RCWA_PROJECT_DIR if set (sub-folders experiments/ reports/ outputs/);
+    1) $RCWA_PROJECT_DIR if set: sub-folders experiments/ reports/ outputs/, or the vault names
+       Deneyler/ Raporlar/ Simulasyonlar/ when that folder has a 'Deneyler' folder (an Obsidian
+       project folder, with the code kept outside the vault);
     2) the Obsidian vault two levels above the repository, if this copy sits inside one —
        recognised by its 'Deneyler' folder; the vault's own folder names are then used;
     3) otherwise ./workspace under the current directory.
@@ -54,6 +56,8 @@ def project_dirs():
     if not env and os.path.isdir(os.path.join(vault, "Deneyler")):
         return vault, os.path.join(vault, "Deneyler"), os.path.join(vault, "Raporlar"), os.path.join(vault, "Simulasyonlar")
     root = os.path.abspath(env) if env else os.path.join(os.getcwd(), "workspace")
+    if env and os.path.isdir(os.path.join(root, "Deneyler")):      # $RCWA_PROJECT_DIR = a vault project folder
+        return root, os.path.join(root, "Deneyler"), os.path.join(root, "Raporlar"), os.path.join(root, "Simulasyonlar")
     return root, os.path.join(root, "experiments"), os.path.join(root, "reports"), os.path.join(root, "outputs")
 
 
@@ -1145,6 +1149,114 @@ def run_metalens_large_tiled(fm, slug):
     return figpath, body, f"D={st['D_lens']:.0f}um {st['n_atoms']:,} atoms, {st['n_tiles']} tiles ~{gb_now:.2f}GB"
 
 
+# recipe folders of the note workflow: next to the code (recipes/, not committed) when the notes are
+# in an Obsidian vault - the vault keeps the report note, not a second report.md - else in the project
+RECIPE_DIR = (os.path.join(HERE, "recipes") if os.path.basename(DENEYLER) == "Deneyler"
+              else os.path.join(PROJECT, "recipes"))
+
+
+def _recipe_spec(fm, name):
+    """A recipe specification (rcwa/recipe_run.py) from the flat front matter of a request note.
+    Unit cell: height + period if given, else the validated default platform (RECIPE)."""
+    def opt(key, cast=float):
+        return num(fm, key, None, cast)
+    spec = {"name": slugify(name), "wavelength_um": num(fm, "lam0", 0.633),
+            "material": fm.get("material", RECIPE["material"]), "substrate": fm.get("substrate", RECIPE["substrate"]),
+            "lens": {"diameter_um": opt("D_lens"), "focal_um": opt("f")},
+            "unit_cell": {"shape": fm.get("shape", "circle"), "height_um": num(fm, "height", RECIPE["height"]),
+                          "period_um": num(fm, "period", RECIPE["period"])}}
+    fab = {k: v for k, v in (("drc_profile", fm.get("drc_profile") or None), ("sidewall_deg", opt("sidewall_deg"))) if v is not None}
+    tol = {k: v for k, v in (("sigma_nm", opt("sigma_nm")), ("bias_nm", opt("bias_nm")), ("index_dn", opt("index_dn")),
+                             ("n_trial", opt("n_trial", int)), ("seed", opt("seed", int))) if v is not None}
+    nm = {k: v for k, v in (("M", opt("M", int)), ("n_sizes", opt("n_sizes", int))) if v is not None}
+    for k, v in (("fabrication", fab), ("tolerance", tol), ("numerics", nm)):
+        if v:
+            spec[k] = v
+    if fm.get("fov_angles"):
+        spec["field_of_view"] = {"angles_deg": [float(a) for a in re.split(r"[,; ]+", fm["fov_angles"].strip("[]")) if a],
+                                 "pol": fm.get("fov_pol", "TE")}
+    return spec
+
+
+def run_recipe(fm, slug):
+    """RECIPE: the full recipe pipeline (rcwa-metalens recipe) from a request note - library with
+    convergence certificate, robust design, error budget, process window, validation records,
+    trust level, GDS. The recipe folder (report.md, recipe.json, lens.gds, manifest.json) goes to
+    recipes/<name>/ in the repository; the report note gets the summary and the full report."""
+    from .recipe_run import run_recipe as _run
+    spec = _recipe_spec(fm, slug)
+    out = os.path.join(RECIPE_DIR, slug)
+    res = _run(spec, out, n_jobs=num(fm, "jobs", None, int), log=lambda *a: print("     ", *a))
+    os.makedirs(SIM, exist_ok=True)
+    figpath = os.path.join(SIM, f"{slug}_recipe.png")
+    fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
+    lib = res.get("library") or {}
+    tab = lib.get("table") or []
+    if tab:
+        s = np.array([r["size_um"] for r in tab]) * 1000
+        t = np.array([complex(r["t"]["re"], r["t"]["im"]) if isinstance(r["t"], dict) else complex(r["t"]) for r in tab])
+        ax[0].plot(s, np.unwrap(np.angle(t)) / (2 * np.pi), "-", color="C0", label="phase / 2pi")
+        ax[0].plot(s, np.abs(t), "-", color="C1", label="|t|")
+        used = np.array((res.get("design") or {}).get("sizes_used_um") or []) * 1000
+        for u in used:
+            ax[0].axvline(u, color="0.85", lw=0.5, zorder=0)
+        ax[0].set_xlabel("pillar size (nm)"); ax[0].legend(); ax[0].set_title("certified library (grey: sizes used)")
+    perf = res.get("performance") or {}
+    tot = ((perf.get("error_budget") or {}).get("total")) or {}
+    names = [("eff_relative", "rel. eff."), ("eff_absolute", "abs. eff."), ("strehl", "Strehl")]
+    vals = [perf.get(k) for k, _ in names]
+    if all(v is not None for v in vals):
+        err = [tot.get(k, {}).get("rss", 0.0) for k, _ in names]
+        ax[1].bar([n for _, n in names], vals, yerr=err, capsize=6, color="C2")
+        ax[1].set_ylim(0, 1.05); ax[1].set_title("performance +- error budget (RSS)")
+    else:
+        ax[1].axis("off"); ax[1].text(0.5, 0.5, f"status: {res['status']}", ha="center")
+    fig.suptitle(f"Recipe {spec['name']}: {res['status']}" + (f", trust {res['trust']['level']}" if res.get("trust") else ""))
+    fig.tight_layout(); fig.savefig(figpath, dpi=110); plt.close(fig)
+    body = recipe_note_body(res, out)
+    summ = (f"{res['status']}, trust {res['trust']['level']}" if res.get("trust") else res["status"])
+    if perf.get("z_focus_um") is not None:
+        summ += f", focus {perf['z_focus_um']:.2f} um, FWHM {perf['fwhm_um'] * 1000:.0f} nm, rel. eff. {perf['eff_relative']:.3f}"
+    return figpath, body, summ
+
+
+def recipe_note_body(res, out):
+    """Report-note body of a recipe: trust level, performance with its budget, where the files
+    are, then the full report.md (headings moved below the note sections)."""
+    perf = res.get("performance") or {}
+    bud = perf.get("error_budget") or {}
+    tot = bud.get("total") or {}
+    lines = [f"- **Status:** {res['status']}" + (f" · **Trust level: {res['trust']['level']}**" if res.get("trust") else "")]
+    if res.get("trust"):
+        lines.append(f"- **Next level needs:** {', '.join(res['trust'].get('next_level_needs') or ['-'])}")
+    rows = [("z_focus_um", "z_focus", "focus", "um", 1.0), ("fwhm_um", "fwhm", "FWHM (perp.)", "nm", 1000.0),
+            ("fwhm_par_um", "fwhm_par", "FWHM (par.)", "nm", 1000.0), ("strehl", "strehl", "Strehl", "", 1.0),
+            ("eff_absolute", "eff_absolute", "absolute efficiency", "", 1.0),
+            ("eff_relative", "eff_relative", "relative efficiency", "", 1.0)]
+    if perf.get("z_focus_um") is not None:
+        lb = set(bud.get("model_not_measured") or [])
+        if not bud.get("complete"):
+            lb = {r[1] for r in rows}
+        lines += ["", "| Metric | Value | Budget (RSS / worst case) |", "|---|---|---|"]
+        for key, bk, label, unit, sc in rows:
+            v = perf.get(key)
+            if v is None:
+                continue
+            t = tot.get(bk) or {}
+            b = (f"± {t['rss'] * sc:.3g} / ± {t['linear'] * sc:.3g}" if t else "-") + (" (lower bound)" if bk in lb and t else "")
+            lines.append(f"| {label} | {v * sc:.4g} {unit} | {b} |")
+    d = os.path.abspath(out)
+    lines += ["", f"- **Recipe folder:** `{d}` — `report.md`, `recipe.json`, `lens.gds` (mask), `manifest.json`",
+              f"- Open: [recipe folder](file:///{d.replace(os.sep, '/').lstrip('/')})"]
+    rp = os.path.join(out, "report.md")
+    if os.path.isfile(rp):
+        with open(rp, encoding="utf-8") as f:
+            rep = f.read()
+        rep = re.sub(r"(?m)^(#{1,3}) ", lambda m: "###" + m.group(1) + " ", rep)
+        lines += ["", "### Full recipe report", "", rep]
+    return "\n".join(lines)
+
+
 RUNNERS = {"grating": run_grating, "metalens_library": run_metalens_library,
            "angle_sweep": run_angle_sweep,
            "grating2d": run_grating2d, "metalens_pillar_2d": run_metalens_pillar_2d,
@@ -1161,7 +1273,8 @@ RUNNERS = {"grating": run_grating, "metalens_library": run_metalens_library,
            "recipe_search": run_recipe_search,
            "fov_analysis": run_fov_analysis, "index_robustness": run_index_robustness,
            "metalens_large_tiled": run_metalens_large_tiled,
-           "achromatic_design": run_achromatic_design}
+           "achromatic_design": run_achromatic_design,
+           "recipe": run_recipe}
 
 
 # ----------------------------- report + update -----------------------------

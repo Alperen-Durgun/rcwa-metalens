@@ -35,6 +35,7 @@ __rcwa_cache__/
 Simulasyonlar/
 outputs/
 examples/output/
+recipes/
 figures/
 
 # --- Secrets / local config (NEVER commit) ---

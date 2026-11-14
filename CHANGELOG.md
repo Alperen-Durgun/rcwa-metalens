@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added — recipes from request notes (Obsidian experiment loop)
+
+* Experiment type `recipe`: a note with `deney_tipi: recipe` (or `experiment_type: recipe`) and
+  flat front matter (lam0, material, D_lens, f; optional unit cell, tolerances, numerics, field
+  of view) runs the recipe pipeline. The report note carries the trust level, the performance
+  table with RSS and worst-case budget (lower bounds flagged), the recipe folder and the full
+  report; the figure shows the certified library and the efficiencies with their budget.
+* In a vault the recipe folder goes to `recipes/<name>/` next to the code (ignored by git).
+* `$RCWA_PROJECT_DIR` pointing at a folder with `Deneyler/` uses the vault folder names, so the
+  repository can live outside the vault and be driven by a launcher inside it.
+* Tests: the recipe runner end to end (T2 on the default platform), the front-matter mapping
+  (accepted by `load_spec`), the vault folder names.
+
 ### Added — small-lens FDTD validation for square pillars (V2, grid-convergence pair)
 
 * Example 20 with `--shape square`, the D 6 / f 6 um lens (NA 0.447) of the 633 nm TiO2 600/375
