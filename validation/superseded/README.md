@@ -18,3 +18,11 @@ run used its default wavelength.
   simulation files, no new run) with the power-flow relative efficiency and the FWHM along the
   polarization. Their relative efficiency compared |E|^2 over different windows (LPA: 8 x the
   aperture, FDTD: the 8 / 12 um monitor) and is not a valid comparison.
+
+* `V1r_TiO2_Siefke_633_600_375_square_2026-11-14.json` (FAILED) and
+  `V1r_TiO2_Siefke_633_600_375_square_conv40_2026-11-14.json` (passed, two sizes) - diagnostic
+  runs of square pillars. At 20 FDTD steps per wavelength the gap resonance near 280 nm sat
+  about one FDTD cell (~13 nm) lower than in RCWA (FDTD |t| 0.61 vs 0.98 at 272.5 nm); its
+  outlier also shifted the constant-phase fit (that analysis was then made robust). RCWA is
+  converged there (M 9-17), and at 40 steps FDTD agrees. The validation record is
+  `../V1r_TiO2_Siefke_633_600_375_square_s40_2026-11-14.json` (same six sizes, 40 steps, passed).

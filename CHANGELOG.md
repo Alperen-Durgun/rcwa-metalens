@@ -14,7 +14,12 @@
   resonance next to 280 nm sits about one FDTD cell (~13 nm) lower than in RCWA (FDTD |t| 0.61
   vs 0.98 at 272.5 nm); RCWA is converged there (M 9 to 17 unchanged) and FDTD at 40 steps agrees
   (0.965 vs 0.977, -0.02 rad). Sharp-cornered pillars near a gap resonance need >= 40 steps.
-  The full square validation at 40 steps follows.
+* Square unit cells validated (example 18, 40 steps, run time 4 ps, 0.452 FC estimate): the
+  same six sizes 128-283 nm, PASSED, largest |d|t|| 0.012, largest dphase 0.033 rad, constant
+  phase -0.023 rad with no size left out, all fields decayed below 1e-5. Record
+  `validation/V1r_TiO2_Siefke_633_600_375_square_s40_2026-11-14.json`; the 20-step run and the
+  two-size convergence run are kept in `validation/superseded/` as diagnostics. Square recipes
+  now meet the unit-cell requirement; T2 also needs a square small-lens record (V2).
 
 ### Validated — angle-dependent library against FDTD (roadmap P2)
 

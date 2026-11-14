@@ -315,7 +315,10 @@ def test_square_recipe_end_to_end(tmp_path):
     vdir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "validation")
     r = rr.run_recipe(s, str(tmp_path / "sq"), validation_dir=vdir, log=lambda *a: None)
     assert r["status"] == "ok" and r["trust"]["level"] == "T1"
-    assert r["validation"]["V1"] == [] and r["validation"]["V2"] == []         # all records are circular
+    # only square records apply: the unit-cell FDTD record (40 steps) yes, no square lens record yet
+    assert all("square" in x["file"] for x in r["validation"]["V1"]) and r["validation"]["V2"] == []
+    assert r["trust"]["checks"]["unit_cell_fullwave"] == any(x["passed"] for x in r["validation"]["V1"])
+    assert "lens_fullwave" in r["trust"]["next_level_needs"] and "error_budget" in r["trust"]["next_level_needs"]
     assert r["library"]["certificate"]["used_sizes_certified"] and r["fabrication"]["drc"]["ok"]
     if r["fabrication"]["gds_readback"] is not None:
         assert r["fabrication"]["gds_readback"]["matches"]
