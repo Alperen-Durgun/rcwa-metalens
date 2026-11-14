@@ -22,6 +22,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--D", type=float, default=6.0); ap.add_argument("--f", type=float, default=6.0)
 ap.add_argument("--material", default="TiO2_Siefke"); ap.add_argument("--lam0", type=float, default=0.633)
 ap.add_argument("--shape", default="circle", choices=["circle", "square"])
+ap.add_argument("--tag", default="", help="suffix of the simulation file, task and record (e.g. s30)")
 ap.add_argument("--H", type=float, default=0.60); ap.add_argument("--L", type=float, default=0.375)
 ap.add_argument("--substrate", default="SiO2_Malitson"); ap.add_argument("--steps", type=int, default=15)
 ap.add_argument("--run-time", type=float, default=3e-13)
@@ -70,7 +71,7 @@ sim = td.Simulation(size=(sx, sx, sz), grid_spec=td.GridSpec.auto(min_steps_per_
                                           source_time=td.GaussianPulse(freq0=freq0, fwidth=freq0 / 8),
                                           direction="+", pol_angle=np.pi / 2)],
                     monitors=mons, run_time=a.run_time, boundary_spec=td.BoundarySpec.all_sides(td.PML()))
-SFX = "" if a.shape == "circle" else "_" + a.shape          # circle keeps the original file names
+SFX = ("" if a.shape == "circle" else "_" + a.shape) + (f"_{a.tag}" if a.tag else "")   # circle, no tag: original names
 PATH = os.path.join("workspace", f"tidy3d_V2_D{D:g}_f{F:g}{SFX}.hdf5")
 if a.load:
     data = td.SimulationData.from_file(PATH); cost = float("nan")
