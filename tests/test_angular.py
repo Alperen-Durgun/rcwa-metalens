@@ -109,3 +109,60 @@ def test_fov_compare_bookkeeping():
     bad = {**alib, "sizes": used[:-1], "t": alib["t"][:, :-1]}
     with pytest.raises(ValueError):
         angular.fov_compare(d, angles, alib=bad)
+
+
+# ----------------------------------------------------------------------------- vector propagation (P1)
+def _single_plane_wave(m=3, n=32, L=0.375, lam=LAM):
+    """Uniform aperture that fills the whole FFT window (pad = 1, no edges), tilted along x by an
+    angle that falls exactly on the FFT grid: the field is ONE plane wave with kx = 2 pi m / (window)."""
+    ff0 = design.FocalField(np.ones((n, n)), L, lam, pad=1.0)
+    s = m * lam / (ff0.N * ff0.dx)                         # sin(theta) on the grid
+    return design.FocalField(np.ones((n, n)), L, lam, pad=1.0, tilt_deg=np.rad2deg(np.arcsin(s))), s
+
+
+def test_vector_single_plane_wave_is_exact():
+    """x-polarized tilted plane wave: Ez / Ex = -kx / kz and S_z = k / (2 kz) (|Ex| = 1, eta0 = 1)
+    everywhere, in every plane; no y component appears."""
+    ff, s = _single_plane_wave()
+    k = 2 * np.pi / LAM; kx = k * s; kz = np.sqrt(k ** 2 - kx ** 2)
+    for z in (0.0, 1.3):
+        v = ff.vector_plane(z, pol="x")
+        assert np.allclose(v["Ez"] / v["Ex"], -kx / kz, atol=1e-10, rtol=0)
+        assert np.allclose(np.abs(v["Ex"]), 1.0, atol=1e-10, rtol=0)
+        assert np.allclose(v["Sz"], k / (2 * kz), atol=1e-10, rtol=0)
+        assert np.max(np.abs(v["Ey"])) == 0.0
+
+
+def test_vector_power_parseval_and_conservation():
+    """For a lens aperture the plane sum of S_z equals the spectral power sum with the exact
+    weight (k^2 - kx^2) / (k0 kz) |A|^2 / 2 (y polarization), and is the same in every plane."""
+    ci = (np.arange(17) - 8) * L; XX, YY = np.meshgrid(ci, ci, indexing="ij"); R = np.hypot(XX, YY)
+    E0 = np.where(R <= 3.0, 1.0, 0.0) * np.exp(1j * design.lens_phase(R, LAM, 6.0))
+    ff = design.FocalField(E0, L, LAM, pad=4.0)
+    A, KZ = ff.A, ff.KZ; k = ff.k
+    kx = 2 * np.pi * np.fft.fftfreq(ff.N, d=ff.dx); KX, _ = np.meshgrid(kx, kx, indexing="ij")
+    prop = np.real(KZ) > 0
+    w = np.where(prop, (k ** 2 - KX ** 2) / (k * np.where(prop, np.real(KZ), 1.0)), 0.0)
+    P_spec = 0.5 * np.sum(np.abs(A) ** 2 * w) / ff.N ** 2
+    p = [ff.vector_plane(z)["Sz"].sum() for z in (0.05, 2.0, 7.0)]
+    assert max(p) - min(p) < 1e-10 * p[0]
+    assert p[1] == pytest.approx(P_spec, rel=1e-10)
+
+
+def test_vector_focus_symmetry_and_scalar_limits():
+    """Mirror-symmetric lens, y polarization: Ez is odd in y (antisymmetric about the x axis), so the
+    FWHM perpendicular to the polarization equals the scalar one (the grid samples y = +-dx/2, so up to
+    a tiny Ez there); along the polarization the vector spot is wider."""
+    ci = (np.arange(17) - 8) * L; XX, YY = np.meshgrid(ci, ci, indexing="ij"); R = np.hypot(XX, YY)
+    E0 = np.where(R <= 3.0, 1.0, 0.0) * np.exp(1j * design.lens_phase(R, LAM, 6.0))
+    d = {"E0": E0, "lam0": LAM, "f": 6.0, "L": L, "n_bg": 1.0, "n_sub": NSUB}
+    v = design.analyze_focus_vector(d)
+    assert v["fwhm_perp"] == pytest.approx(v["fwhm_perp_scalar"], rel=2e-3)
+    assert v["fwhm_par"] > v["fwhm_par_scalar"] * 1.01
+    assert 0 < v["Ez_fraction"] < 0.5 and 0 < v["eff_relative_Sz"] <= 1 and 0 < v["eff_absolute_Sz"] < 1
+    Ez = v["plane"]["Ez"]; x = v["field"].x
+    c = int(np.argmin(np.abs(x - x[x > 0].min())))            # first sample above y = 0; its mirror is c - 1
+    assert abs(x[c] + x[c - 1]) < 1e-12
+    assert np.allclose(Ez[:, c], -Ez[:, c - 1], atol=1e-10 * np.max(np.abs(Ez)), rtol=0)
+    with pytest.raises(ValueError):
+        v["field"].vector_plane(1.0, pol="z")

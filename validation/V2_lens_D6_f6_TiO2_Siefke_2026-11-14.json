@@ -1,0 +1,137 @@
+{
+ "passed": true,
+ "lpa": {
+  "z_focus": 5.166856783156584,
+  "fwhm": 0.6459615638131889,
+  "eff_relative": 0.9271712567519167,
+  "eff_absolute": 0.7913395940952285,
+  "strehl": 0.9135416913441903,
+  "NA": 0.4472135954999579,
+  "fwhm_in_fdtd_plane": 0.6537427987075541,
+  "eff_relative_in_fdtd_plane": 0.9275498530962251,
+  "fwhm_par_in_fdtd_plane": 0.6841505672141359,
+  "eff_relative_Sz_in_fdtd_plane": 0.9176808271441104
+ },
+ "fdtd": {
+  "z_focus": 5.060166632391777,
+  "fwhm": 0.6310138962029641,
+  "eff_relative": 0.9054648129430889,
+  "xy_plane_z": 5.279817455112881,
+  "fwhm_par": 0.6764324457031088,
+  "eff_relative_Sz": 0.8607313531646889,
+  "focal_plane_power_share": 0.9344535048715557
+ },
+ "D": 6.0,
+ "f": 6.0,
+ "L": 0.375,
+ "H": 0.6,
+ "n_sub": 1.4570121246412515,
+ "lam0": 0.633,
+ "material": "TiO2_Siefke",
+ "steps": 25,
+ "run_time": 3e-13,
+ "estimated_cost_fc": NaN,
+ "aperture": "PEC film, hole radius D/2 + L/2",
+ "tidy3d_version": "2.12.2",
+ "final_decay": 8.55e-06,
+ "diagnostic": {
+  "z_focus_fdtd_nearfield_propagated": 5.103211148607161,
+  "time_sign": 1,
+  "cell_phase_rms_rad": 0.18614230334218257,
+  "cell_profile": [
+   {
+    "r_um": [
+     0.0,
+     0.675
+    ],
+    "rms_phase_err_rad": 0.1690401758340109,
+    "mean_amp_ratio": 2.805508444689075
+   },
+   {
+    "r_um": [
+     0.675,
+     1.35
+    ],
+    "rms_phase_err_rad": 0.12652571022497708,
+    "mean_amp_ratio": 2.561720997303422
+   },
+   {
+    "r_um": [
+     1.35,
+     2.0250000000000004
+    ],
+    "rms_phase_err_rad": 0.121391554177288,
+    "mean_amp_ratio": 2.3862961375747034
+   },
+   {
+    "r_um": [
+     2.0250000000000004,
+     2.7
+    ],
+    "rms_phase_err_rad": 0.13439915013711665,
+    "mean_amp_ratio": 2.5956954912526418
+   },
+   {
+    "r_um": [
+     2.7,
+     3.375
+    ],
+    "rms_phase_err_rad": 0.3137250503903792,
+    "mean_amp_ratio": 1.8591605346259874
+   }
+  ],
+  "cross_pol_ratio": 0.03184500336647034,
+  "z_focus_lpa_of_fdtd_cells": 4.989105876884403,
+  "z_focus_fdtd_nearfield_cells_only": 4.9439910436044805,
+  "rim_power_fraction": 0.048201220119573236,
+  "z_focus_lpa_of_fdtd_cells_lowpass": 5.042908270582628,
+  "cell_profile_lowpass": [
+   {
+    "r_um": [
+     0.0,
+     0.675
+    ],
+    "mean_phase_err_rad": 0.1250948952048159,
+    "rms_phase_err_rad": 0.12620873544606348,
+    "rel_amp": 1.1473834197250201
+   },
+   {
+    "r_um": [
+     0.675,
+     1.35
+    ],
+    "mean_phase_err_rad": -0.038393158241678625,
+    "rms_phase_err_rad": 0.12271792660906068,
+    "rel_amp": 1.0429727521712846
+   },
+   {
+    "r_um": [
+     1.35,
+     2.0250000000000004
+    ],
+    "mean_phase_err_rad": 0.01957112160492402,
+    "rms_phase_err_rad": 0.15340050177618808,
+    "rel_amp": 0.9502464200080191
+   },
+   {
+    "r_um": [
+     2.0250000000000004,
+     2.7
+    ],
+    "mean_phase_err_rad": 0.06399247124893857,
+    "rms_phase_err_rad": 0.12451135943398108,
+    "rel_amp": 1.0549768761496308
+   },
+   {
+    "r_um": [
+     2.7,
+     3.375
+    ],
+    "mean_phase_err_rad": -0.22639121350184224,
+    "rms_phase_err_rad": 0.2618714661359058,
+    "rel_amp": 0.8043987513163853
+   }
+  ],
+  "cell_phase_rms_lowpass_rad": 0.16847814915769133
+ }
+}

@@ -236,31 +236,41 @@ def test_model_term_from_v2_records():
     assert budget.model_term([], 0.3) is None
 
 
-def test_recipe_with_repository_records_reaches_t2(tmp_path):
-    """With the repository's validation records (633 nm TiO2 platform: V1 passed, V2 D 6 passed)
-    and a complete error budget the recipe is T2; the budget numbers are consistent."""
+def test_recipe_with_repository_records(tmp_path):
+    """With the repository's validation records (633 nm TiO2 platform: V1 passed, V2 D 6 passed).
+    T2 needs the model term of every measurable metric; the relative efficiency must come from the
+    window-independent power-flow comparison, which records written before that analysis do not
+    hold - then the recipe is T1 and the report says why. Budget arithmetic is checked either way."""
     vdir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "validation")
     r = rr.run_recipe(BASE, str(tmp_path / "t2"), validation_dir=vdir, log=lambda *a: None)
-    assert r["trust"]["level"] == "T2", r["trust"]
-    assert r["trust"]["next_level_needs"][0].startswith("fabrication_calibration")
     eb = r["performance"]["error_budget"]
-    assert eb["complete"] and eb["gaps"] == [] and set(eb["model_not_measured"]) == {"strehl", "eff_absolute"}
-    for k in ("z_focus", "fwhm", "strehl", "eff_absolute", "eff_relative"):
+    v2 = r["validation"]["V2"]
+    sz = all(x["fdtd_eff_relative"] is not None and x["fdtd_fwhm_par"] is not None for x in v2)
+    if sz:
+        assert r["trust"]["level"] == "T2" and eb["complete"]
+        assert set(eb["model_not_measured"]) == {"strehl", "eff_absolute"}
+    else:
+        assert r["trust"]["level"] == "T1" and r["trust"]["next_level_needs"] == ["error_budget"]
+        assert not eb["complete"] and {"eff_relative", "fwhm_par"} <= set(eb["model_not_measured"])
+        rep = (tmp_path / "t2" / "report.md").read_text(encoding="utf-8")
+        assert "no power-flow comparison in this record" in rep and "Budget complete for trust level T2: **no**" in rep
+    from rcwa import budget
+    for k in budget.METRICS:
         vals = [t[k] for t in eb["terms"].values() if t is not None and t.get(k) is not None]
         assert eb["total"][k]["rss"] == pytest.approx(np.sqrt(np.sum(np.square(vals))), rel=1e-12)
         assert eb["total"][k]["linear"] == pytest.approx(np.sum(vals), rel=1e-12)
-        assert eb["nominal"][k] == pytest.approx(r["performance"][k if k.startswith("eff") or k == "strehl"
-                                                                   else {"z_focus": "z_focus_um", "fwhm": "fwhm_um"}[k]])
+    pf = r["performance"]
+    for k, key in (("z_focus", "z_focus_um"), ("fwhm", "fwhm_um"), ("fwhm_par", "fwhm_par_um"), ("strehl", "strehl"),
+                   ("eff_absolute", "eff_absolute"), ("eff_relative", "eff_relative")):
+        assert eb["nominal"][k] == pytest.approx(pf[key], rel=1e-12)
     assert eb["terms"]["numerical_prop"]["z_focus"] == 0.0 and eb["terms"]["numerical_prop"]["strehl"] == 0.0
     nom = eb["nominal"]; pw = r["process_window"]
     worst = max(abs(row["eff_absolute"] - nom["eff_absolute"]) for row in pw["size_bias"])
     assert eb["terms"]["fabrication_bias"]["eff_absolute"] == pytest.approx(worst, abs=1e-12)
-    # the model term is the largest measured |FDTD - LPA| of the platform's V2 records, applied to this lens
-    v2 = [x for x in r["validation"]["V2"]]
     rel = max(abs(x["fdtd_focus"] - x["lpa_focus"]) / x["lpa_focus"] for x in v2)
     assert eb["terms"]["model"]["z_focus"] == pytest.approx(rel * nom["z_focus"], rel=1e-12)
-    rep = (tmp_path / "t2" / "report.md").read_text(encoding="utf-8")
-    assert "Trust level: **T2**" in rep and "Budget complete for trust level T2: yes" in rep and "not measured" in rep
+    # vector focal plane: perpendicular FWHM equals the scalar one, the parallel one is wider
+    assert pf["fwhm_um"] == pytest.approx(pf["scalar"]["fwhm_um"], rel=2e-3) and pf["fwhm_par_um"] > pf["fwhm_um"]
 
 
 def test_display_path_handles_other_drives(monkeypatch, tmp_path):

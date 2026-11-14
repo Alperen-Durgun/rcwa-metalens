@@ -165,9 +165,12 @@ one wavelength, normal incidence, no substrate.
 10 um, opaque aperture, `examples/20_lens_fdtd_aperture.py`, records in `validation/`). The
 focal analysis predicts a focus 3 % beyond the FDTD focus at 15 grid steps per wavelength
 (5.17 vs 5.01 um, 9.38 vs 9.09 um) and 2.1 % at 25 steps (5.06 um); about half of the
-remaining gap is FDTD grid error. FWHM agrees within 3.5 %, relative efficiency within 2.7
-points (LPA 0.93, FDTD 0.90). This comparison found that the former FFT window of the focal
-analysis biased the focus by up to 5 %; it was fixed (see `docs/conventions.md`).
+remaining gap is FDTD grid error. FWHM agrees within 3.5 % perpendicular and 1.5 % parallel to
+the polarization (vector propagation; scalar: 5 %). The relative efficiency - power through the
+focal spot / power through the lens - is 0.92 predicted and 0.86 / 0.84 in FDTD: the real lenses
+scatter more light to wide angles than the locally periodic approximation, and recipe error
+budgets carry this 8-point model term. This comparison also found that the former FFT window of
+the focal analysis biased the focus by up to 5 %; it was fixed (see `docs/conventions.md`).
 
 ## Limits — read before sending a mask to a foundry
 

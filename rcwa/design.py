@@ -446,6 +446,29 @@ class FocalField:
     def intensity(self, z):
         return np.abs(self.at(z)) ** 2
 
+    def vector_plane(self, z, pol="y"):
+        """Vector field in the plane z (roadmap P1). The aperture field is the transverse
+        component along `pol` ("x" or "y"); the other transverse component is zero at the
+        aperture (zeroth order of mirror-symmetric pillars at normal incidence has no cross
+        polarization). Each Cartesian component propagates with the exact angular spectrum;
+        Ez follows from div E = 0 (kx Ex + ky Ey + kz Ez = 0) and H = k x E / k0 (units with
+        eta0 = 1, so H = n E for a plane wave). Evanescent components are included (they decay).
+        Returns dict Ex, Ey, Ez (N x N), I = |Ex|^2+|Ey|^2+|Ez|^2, Sz = Re(Ex Hy* - Ey Hx*)/2."""
+        if pol not in ("x", "y"):
+            raise ValueError('pol must be "x" or "y"')
+        A, KZ = self._spectrum()
+        kx = 2 * np.pi * np.fft.fftfreq(self.N, d=self.dx); KX, KY = np.meshgrid(kx, kx, indexing="ij")
+        Ax = A if pol == "x" else np.zeros_like(A); Ay = A if pol == "y" else np.zeros_like(A)
+        safe = np.where(np.abs(KZ) > 1e-12 * self.k, KZ, 1.0)
+        Az = np.where(np.abs(KZ) > 1e-12 * self.k, -(KX * Ax + KY * Ay) / safe, 0.0)
+        P = np.exp(1j * KZ * z)
+        k0 = 2 * np.pi / self.lam0
+        Hxk = (KY * Az - KZ * Ay) / k0; Hyk = (KZ * Ax - KX * Az) / k0
+        Ex, Ey, Ez, Hx, Hy = (np.fft.ifft2(c * P) for c in (Ax, Ay, Az, Hxk, Hyk))
+        I = np.abs(Ex) ** 2 + np.abs(Ey) ** 2 + np.abs(Ez) ** 2
+        Sz = 0.5 * np.real(Ex * np.conj(Hy) - Ey * np.conj(Hx))
+        return {"Ex": Ex, "Ey": Ey, "Ez": Ez, "I": I, "Sz": Sz}
+
     def on_axis_field(self, z):
         """Complex on-axis field at one or many z: Rayleigh-Sommerfeld (first kind) sum over
         the aperture samples, U(0,0,z) = (1/2pi) sum U0 (z/r)(1/r - ik) exp(ikr)/r dA."""
@@ -583,6 +606,39 @@ def analyze_focus(design, u=4, pad=None, nz=81):
             "dof": metrics.depth_of_focus(Iz, zc),
             "fresnel_number": (design["D_lens"] / 2) ** 2 / (lam0 / n_bg * f),
             "I": I, "x": x, "zc": zc, "I_axis": Iz, "field": ff}
+
+
+def analyze_focus_vector(design, pol="y", z=None, u=4, pad=None, nz=81, r_abs=3.0):
+    """Vector focal analysis (roadmap P1) in the plane of the on-axis focus (or z).
+
+    The on-axis focus is the same as in analyze_focus: on the axis of a mirror-symmetric
+    aperture Ez = 0 and the polarized component obeys the exact Rayleigh-Sommerfeld sum.
+    Returns dict: z_focus; fwhm_perp / fwhm_par (|E|^2 cut perpendicular / parallel to the
+    polarization); the scalar FWHM along the same two cuts; Ez_fraction (|Ez|^2 share of the
+    focal-plane |E|^2); eff_relative_E2 (|E|^2 in the 3-FWHM disk / plane, the quantity the
+    FDTD records use); eff_relative_Sz and eff_absolute_Sz (power flow S_z instead of |E|^2;
+    absolute: / incident power in the substrate)."""
+    from .metrics import fwhm_1d
+    lam0, f, L, n_bg = design["lam0"], design["f"], design["L"], design["n_bg"]
+    ff = FocalField(design["E0"], L, lam0, n_bg=n_bg, u=u, pad=pad)
+    zf = ff.find_focus(f, nz=nz)[0] if z is None else float(z)
+    v = ff.vector_plane(zf, pol=pol); x = ff.x
+    Is = np.abs(v["Ey" if pol == "y" else "Ex"]) ** 2          # scalar model: the polarized component
+    i, j = np.unravel_index(np.argmax(v["I"]), v["I"].shape)
+    cut_x, cut_y = v["I"][:, j], v["I"][i, :]
+    par, perp = (cut_y, cut_x) if pol == "y" else (cut_x, cut_y)
+    spar, sperp = (Is[i, :], Is[:, j]) if pol == "y" else (Is[:, j], Is[i, :])
+    fw_perp, fw_par = fwhm_1d(perp, x), fwhm_1d(par, x)
+    X, Y = np.meshgrid(x, x, indexing="ij"); rr = np.hypot(X - x[i], Y - x[j])
+    disk = rr <= r_abs * fw_perp                                 # same disk rule as the scalar suite
+    P_inc = ff.P_incident * design["n_sub"] / n_bg               # scalar units: sum |E|^2 over samples
+    Sz_units = v["Sz"] * 2.0 / n_bg                              # S_z in the same units (plane wave: |E|^2)
+    return {"z_focus": float(zf), "pol": pol, "fwhm_perp": float(fw_perp), "fwhm_par": float(fw_par),
+            "fwhm_perp_scalar": float(fwhm_1d(sperp, x)), "fwhm_par_scalar": float(fwhm_1d(spar, x)),
+            "Ez_fraction": float(np.sum(np.abs(v["Ez"]) ** 2) / np.sum(v["I"])),
+            "eff_relative_E2": float(v["I"][disk].sum() / v["I"].sum()),
+            "eff_relative_Sz": float(v["Sz"][disk].sum() / v["Sz"].sum()),
+            "eff_absolute_Sz": float(Sz_units[disk].sum() / P_inc), "field": ff, "plane": v}
 
 
 # --------------------------------------------------------------------------- tolerance

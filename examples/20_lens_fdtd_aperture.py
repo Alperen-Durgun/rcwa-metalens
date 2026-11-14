@@ -116,6 +116,37 @@ dz_rel = (fd["z_focus"] - lpa["z_focus"]) / lpa["z_focus"]
 dfw = (fd["fwhm"] - lpa["fwhm_in_fdtd_plane"]) / lpa["fwhm_in_fdtd_plane"]
 ok = abs(dz_rel) < 0.03 and abs(dfw) < 0.05
 
+
+# ---- power flow and polarization (roadmap P1): window-independent relative efficiency
+#      = S_z through the 3-FWHM disk in the focal plane / total S_z through the lens (near-field
+#      plane, which covers the whole aperture); FWHM also along the polarization (y)
+_trapz = getattr(np, "trapezoid", None) or np.trapz      # numpy >= 2 / older numpy
+
+
+def plane_Sz(mon):
+    """S_z = Re(Ex Hy* - Ey Hx*) / 2 on the Ey coordinates of a planar monitor, with x, y."""
+    f = data[mon]; xc = f.Ey.coords["x"].values; yc = f.Ey.coords["y"].values
+    comp = {c: np.asarray(getattr(f, c).isel(f=0).interp(x=xc, y=yc, kwargs={"fill_value": 0.0}).values).squeeze()
+            for c in ("Ex", "Ey", "Hx", "Hy")}
+    return 0.5 * np.real(comp["Ex"] * np.conj(comp["Hy"]) - comp["Ey"] * np.conj(comp["Hx"])), np.asarray(xc), np.asarray(yc)
+
+
+fd["fwhm_par"] = float(metrics.fwhm_1d(Iu[pk[0], :], u))                # |E|^2 cut along the polarization (y)
+v_l = ffl.vector_plane(z_xy, pol="y"); Iv = v_l["I"]
+iv, jv = np.unravel_index(np.argmax(Iv), Iv.shape)
+fw_perp_l = metrics.fwhm_1d(Iv[:, jv], xl)
+lpa["fwhm_par_in_fdtd_plane"] = float(metrics.fwhm_1d(Iv[iv, :], xl))
+rlv = np.hypot(UL - xl[iv], VL - xl[jv])
+lpa["eff_relative_Sz_in_fdtd_plane"] = float(v_l["Sz"][rlv <= 3 * fw_perp_l].sum() / v_l["Sz"].sum())
+if "near" in data.monitor_data:
+    Sf, xf, yf = plane_Sz("xy"); Sn, xn_, yn_ = plane_Sz("near")
+    Sf_u = RegularGridInterpolator((xf, yf), Sf, bounds_error=False, fill_value=0.0)(np.stack(np.meshgrid(u, u, indexing="ij"), -1))
+    du = u[1] - u[0]
+    P_disk = float(Sf_u[r <= 3 * fw].sum() * du * du)
+    P_lens = float(_trapz(_trapz(Sn, yn_, axis=1), xn_))
+    fd["eff_relative_Sz"] = P_disk / P_lens
+    fd["focal_plane_power_share"] = float(_trapz(_trapz(Sf, yf, axis=1), xf)) / P_lens
+
 # ---- diagnostic: FDTD near field (a) propagated with the LPA angular-spectrum method, (b) per-cell phase vs design
 diag = {}
 if "near" in data.monitor_data:
@@ -224,7 +255,12 @@ print("\nRESULT  (LPA vs FDTD)")
 print(f"  focus  {lpa['z_focus']:.3f} vs {fd['z_focus']:.3f} um   ({dz_rel*100:+.1f} %)")
 print(f"  FWHM   {lpa['fwhm_in_fdtd_plane']*1000:.0f} vs {fd['fwhm']*1000:.0f} nm   ({dfw*100:+.1f} %)  "
       f"[both in the FDTD monitor plane z = {z_xy:.3f} um]")
-print(f"  eff_rel {lpa['eff_relative_in_fdtd_plane']:.3f} vs {fd['eff_relative']:.3f}  [same plane]")
+print(f"  eff_rel {lpa['eff_relative_in_fdtd_plane']:.3f} vs {fd['eff_relative']:.3f}  [|E|^2, NOT window-consistent: LPA plane "
+      f"{ffl.N * ffl.dx:.0f} um, FDTD monitor {sx:.1f} um - superseded by the S_z line]")
+print(f"  FWHM along the polarization (vector LPA) {lpa['fwhm_par_in_fdtd_plane']*1000:.0f} vs {fd['fwhm_par']*1000:.0f} nm")
+if "eff_relative_Sz" in fd:
+    print(f"  eff_rel (power: S_z in 3-FWHM disk / S_z through the lens) {lpa['eff_relative_Sz_in_fdtd_plane']:.3f} vs "
+          f"{fd['eff_relative_Sz']:.3f}   (FDTD focal monitor holds {fd['focal_plane_power_share']:.3f} of the lens power)")
 print(f"  final field decay {getattr(data, 'final_decay_value', float('nan')):.1e}")
 print(f"\nV2 {'PASSED' if ok else 'FAILED'} (focus within 3 %, FWHM within 5 %)")
 os.makedirs("validation", exist_ok=True)

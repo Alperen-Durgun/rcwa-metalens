@@ -1,8 +1,11 @@
 """Error budget of the predicted lens performance (roadmap T2).
 
-For each metric - focus position, FWHM, Strehl ratio, absolute and relative efficiency - the
-budget lists independent terms, each the largest deviation from the nominal prediction over
-a stated scenario set:
+For each metric - focus position, FWHM perpendicular and parallel to the polarization, Strehl
+ratio, absolute and relative efficiency - the budget lists independent terms, each the largest
+deviation from the nominal prediction over a stated scenario set. The focal plane is computed
+with vector propagation (roadmap P1): the efficiencies are power-flow (S_z) ratios - absolute:
+S_z through the 3-FWHM disk / incident power, relative: / power transmitted by the lens - and
+the FWHM along the polarization includes Ez.
 
   numerical_rcwa     the used pillar sizes re-solved with M + 2 Fourier orders
   numerical_prop     focal-plane metrics with an FFT window twice as large (on-axis values,
@@ -11,10 +14,11 @@ a stated scenario set:
   fabrication_bias   uniform size bias +-b and +-b/2 (interpolated refined library)
   fabrication_random random size error N(0, sigma^2) per pillar: |mean shift| + 1 std over
                      the Monte Carlo trials
-  model              locally periodic approximation + scalar propagation against FDTD, from
-                     the platform's small-lens records (V2): the largest |FDTD - LPA| seen.
-                     Only focus, FWHM and relative efficiency were measured; Strehl and
-                     absolute efficiency have no model term (None, reported as not measured).
+  model              locally periodic approximation + propagation against FDTD, from the
+                     platform's small-lens records (V2): the largest |FDTD - LPA| seen. Focus,
+                     both FWHMs and the relative efficiency (power flow, window-independent)
+                     can be measured there; Strehl and absolute efficiency have no model term
+                     (None, reported as not measured).
 
 Terms are half-widths of ranges, not standard deviations. `rss` combines them in quadrature
 (assuming independence); `linear` is their sum (worst case). The model term also carries its
@@ -24,17 +28,22 @@ import numpy as np
 
 from . import design as dz
 
-METRICS = ("z_focus", "fwhm", "strehl", "eff_absolute", "eff_relative")
-RELATIVE = ("z_focus", "fwhm")            # quoted relative to the value; others in absolute points
-MODEL_MEASURED = ("z_focus", "fwhm", "eff_relative")
+METRICS = ("z_focus", "fwhm", "fwhm_par", "strehl", "eff_absolute", "eff_relative")
+RELATIVE = ("z_focus", "fwhm", "fwhm_par")    # quoted relative to the value; others in absolute points
+MODEL_MEASURED = ("z_focus", "fwhm", "fwhm_par", "eff_relative")
 NZ = 81
 
 
 def lens_metrics(d, E0=None, pad=None):
-    """The five metrics of a design (optionally with another aperture field or FFT window)."""
+    """The metrics of a design (optionally with another aperture field or FFT window): on-axis
+    focus and Strehl (exact Rayleigh-Sommerfeld), FWHM perpendicular (fwhm) and parallel
+    (fwhm_par) to the polarization, power-flow efficiencies (vector propagation)."""
     dd = d if E0 is None else {**d, "E0": E0}
     a = dz.analyze_focus(dd, pad=pad, nz=NZ)
-    return {k: float(a[k]) for k in METRICS}
+    v = dz.analyze_focus_vector(dd, z=a["z_focus"], pad=pad)
+    return {"z_focus": float(a["z_focus"]), "fwhm": float(v["fwhm_perp"]), "fwhm_par": float(v["fwhm_par"]),
+            "strehl": float(a["strehl"]), "eff_absolute": float(v["eff_absolute_Sz"]),
+            "eff_relative": float(v["eff_relative_Sz"])}
 
 
 def _resolved_field(d, n_pillar=None, M=None, n_jobs=None):
@@ -65,6 +74,7 @@ def model_term(records, NA):
         return None
     out = {"files": [r["file"] for r in use], "record_NA": max(r["NA"] for r in use), "metrics": {}}
     pairs = {"z_focus": ("lpa_focus", "fdtd_focus", True), "fwhm": ("lpa_fwhm", "fdtd_fwhm", True),
+             "fwhm_par": ("lpa_fwhm_par", "fdtd_fwhm_par", True),
              "eff_relative": ("lpa_eff_relative", "fdtd_eff_relative", False)}
     for m, (kl, kf, rel) in pairs.items():
         dv = [(r[kf] - r[kl]) / r[kl] if rel else (r[kf] - r[kl]) for r in use

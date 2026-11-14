@@ -12,3 +12,9 @@ Kept for traceability; the recipe pipeline does not read this folder.
 
 `lam0` (0.633 um) was added to both afterwards: example 20 did not store it, and every V2
 run used its default wavelength.
+
+* `V2_lens_D6_f6_TiO2_Siefke_2026-11-13.json` and `V2_lens_D10_f10_TiO2_Siefke_2026-11-13.json` -
+  superseded by the 2026-11-14 records: the same FDTD data (re-analysed from the saved
+  simulation files, no new run) with the power-flow relative efficiency and the FWHM along the
+  polarization. Their relative efficiency compared |E|^2 over different windows (LPA: 8 x the
+  aperture, FDTD: the 8 / 12 um monitor) and is not a valid comparison.

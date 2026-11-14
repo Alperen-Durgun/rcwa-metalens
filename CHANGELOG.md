@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+### Added — vector focal-plane propagation and power-flow efficiencies (roadmap P1)
+
+* `FocalField.vector_plane(z, pol)`: Ex, Ey, Ez (div E = 0), H = k x E / k0, S_z. Checks: one
+  tilted plane wave is exact to 1e-10 (Ez / Ex = -kx / kz, S_z = k / 2kz); the plane sum of S_z
+  equals the spectral power sum (Parseval) and is the same in every plane; Ez is antisymmetric
+  about the x axis for a symmetric lens. `design.analyze_focus_vector`: FWHM perpendicular and
+  parallel to the polarization, |Ez|^2 share, power-flow efficiencies.
+* Recipe metrics and error budgets now use the vector focal plane: FWHM perpendicular (unchanged,
+  Ez = 0 on that cut) and parallel to the polarization (new metric), and power-flow (S_z)
+  efficiencies instead of |E_y|^2 ratios over the computation window. Example (V2 lens): FWHM
+  646 / 675 nm, relative efficiency 0.917 (scalar 0.927), absolute 0.793 (scalar 0.791).
+* Found while checking: the V2 relative efficiencies compared |E|^2 over different windows (LPA:
+  8 x the aperture, FDTD: the 8 / 12 um monitor), which made the gap look like 2.3-2.7 points.
+  Example 20 now also computes the window-independent comparison - S_z through the 3-FWHM focal
+  disk / S_z through the near-field monitor over the lens - and the FWHM along the polarization.
+  The saved FDTD runs were re-analysed (no new run; records dated 2026-11-14, the 2026-11-13
+  ones moved to `validation/superseded/`):
+  - FWHM along the polarization, vector LPA vs FDTD: 684 vs 676 nm (D 6), 730 vs 741 nm (D 10);
+    the scalar model would be 3.3 % and 5.0 % off.
+  - Relative efficiency (power flow): 0.918 vs 0.861 (D 6), 0.921 vs 0.841 (D 10). The FDTD
+    lenses scatter more light to wide angles (their focal monitor holds 93.4 % / 92.2 % of the
+    transmitted power, the LPA prediction 96.1 % / 97.1 %).
+* Consequence: the relative-efficiency model term of the error budget is 8.0 points (was 2.7):
+  V2 lens 0.917 +- 0.082. Recipes stay T2 (the budget is complete) with this larger, measured
+  uncertainty. Records without the power-flow comparison are not used for that term.
+* `examples/21_oblique_unitcell_validation.py`: FDTD check of the angle-dependent library (unit
+  cells at 10 and 20 deg, Bloch boundaries with the substrate index, zeroth Fourier coefficient
+  of E_y). The simulation set-up was checked (Bloch vectors equal sin(theta) L / lam0); not run yet.
+
 ### Added — angle-dependent atom library and off-axis analysis (roadmap P2)
 
 * `rcwa/angular.py`: `angle_library(lib, angles, pol)` solves pillar sizes with RCWA at oblique

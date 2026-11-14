@@ -301,8 +301,12 @@ def find_validation_records(vdir, plat, lam0, H, L, sidewall_deg=90.0, residual=
             item.update({"D": rec.get("D"), "f": rec.get("f"), "steps": rec.get("steps"), "NA": lp.get("NA"),
                          "lpa_focus": lp.get("z_focus"), "fdtd_focus": fd.get("z_focus"),
                          "lpa_fwhm": lp.get("fwhm_in_fdtd_plane"), "fdtd_fwhm": fd.get("fwhm"),
-                         "lpa_eff_relative": lp.get("eff_relative_in_fdtd_plane", lp.get("eff_relative")),
-                         "fdtd_eff_relative": fd.get("eff_relative")})
+                         # relative efficiency: only the window-consistent power-flow definition counts
+                         "lpa_eff_relative": lp.get("eff_relative_Sz_in_fdtd_plane"),
+                         "fdtd_eff_relative": fd.get("eff_relative_Sz"),
+                         "lpa_eff_relative_E2": lp.get("eff_relative_in_fdtd_plane", lp.get("eff_relative")),
+                         "fdtd_eff_relative_E2": fd.get("eff_relative"),
+                         "lpa_fwhm_par": lp.get("fwhm_par_in_fdtd_plane"), "fdtd_fwhm_par": fd.get("fwhm_par")})
         out[kind].append(item)
     return out
 
@@ -408,11 +412,17 @@ def run_recipe(spec, out_dir, validation_dir="auto", n_jobs=None, log=print):
     a = dz.analyze_focus(d, nz=NZ)
     bud = budget.error_budget(d, vrec["V2"], dn=tol["index_dn"], bias_nm=tol["bias_nm"], sigma_nm=tol["sigma_nm"],
                               n_trial=tol["n_trial"], seed=tol["seed"], n_jobs=n_jobs)
-    assert all(abs(bud["nominal"][k] - float(a[k])) < 1e-12 for k in budget.METRICS)
-    res["performance"] = {"model": "LPA + scalar Rayleigh-Sommerfeld / angular spectrum",
-                          "z_focus_um": float(a["z_focus"]), "fwhm_um": float(a["fwhm"]),
-                          "diffraction_fwhm_um": float(a["diffraction_fwhm"]), "strehl": float(a["strehl"]),
-                          "eff_absolute": float(a["eff_absolute"]), "eff_relative": float(a["eff_relative"]),
+    nm = bud["nominal"]
+    assert abs(nm["z_focus"] - float(a["z_focus"])) < 1e-12 and abs(nm["strehl"] - float(a["strehl"])) < 1e-12
+    v = dz.analyze_focus_vector(d, z=a["z_focus"])
+    res["performance"] = {"model": ("LPA; on-axis values by the exact Rayleigh-Sommerfeld sum, focal plane by vector "
+                                    "angular spectrum (Ex, Ey, Ez; y polarization); efficiencies are power-flow (S_z) ratios"),
+                          "z_focus_um": nm["z_focus"], "fwhm_um": nm["fwhm"], "fwhm_par_um": nm["fwhm_par"],
+                          "diffraction_fwhm_um": float(a["diffraction_fwhm"]), "strehl": nm["strehl"],
+                          "eff_absolute": nm["eff_absolute"], "eff_relative": nm["eff_relative"],
+                          "Ez_fraction": float(v["Ez_fraction"]),
+                          "scalar": {"fwhm_um": float(a["fwhm"]), "eff_absolute": float(a["eff_absolute"]),
+                                     "eff_relative": float(a["eff_relative"])},
                           "fresnel_number": float(a["fresnel_number"]),
                           "error_budget": {k: bud[k] for k in ("terms", "total", "model", "complete", "gaps",
                                                                "model_not_measured", "settings", "nominal")}}
@@ -436,7 +446,8 @@ def run_recipe(spec, out_dir, validation_dir="auto", n_jobs=None, log=print):
     sc = bud["scenarios"]; b = tol["bias_nm"]
 
     def row(m):
-        return {"z_focus": m["z_focus"], "fwhm": m["fwhm"], "strehl": m["strehl"], "eff_absolute": m["eff_absolute"]}
+        return {"z_focus": m["z_focus"], "fwhm": m["fwhm"], "fwhm_par": m["fwhm_par"], "strehl": m["strehl"],
+                "eff_absolute": m["eff_absolute"]}
     res["process_window"] = {
         "size_bias": [{"bias_nm": float(x), **row(bud["nominal"] if x == 0 else sc[f"bias_{x:+.1f}nm"])}
                       for x in (-b, -b / 2, 0.0, b / 2, b)],
@@ -446,7 +457,7 @@ def run_recipe(spec, out_dir, validation_dir="auto", n_jobs=None, log=print):
             "strehl_mean": sc["random"]["mean"]["strehl"], "strehl_p10": sc["random"]["p10"]["strehl"],
             "eff_mean": sc["random"]["mean"]["eff_absolute"], "eff_p10": sc["random"]["p10"]["eff_absolute"],
             "focus_mean": sc["random"]["mean"]["z_focus"], "focus_std": sc["random"]["std"]["z_focus"]},
-        "index_shift": [{"dn": float(s_), **{k: sc[f"index_{s_:+.3f}"][k] for k in ("z_focus", "fwhm", "strehl",
+        "index_shift": [{"dn": float(s_), **{k: sc[f"index_{s_:+.3f}"][k] for k in ("z_focus", "fwhm", "fwhm_par", "strehl",
                                                                                    "eff_absolute", "eff_relative")}}
                         for s_ in (-tol["index_dn"], tol["index_dn"])],
         "model": ("interpolated refined library for size errors; RCWA re-solve of the used sizes for the "
@@ -545,7 +556,8 @@ def _f(x, nd=3):
 
 _BUDGET_COLS = [("numerical_rcwa", "RCWA M+2"), ("numerical_prop", "FFT window"), ("material", "film index"),
                 ("fabrication_bias", "size bias"), ("fabrication_random", "random size"), ("model", "model (V2)")]
-_METRIC_ROWS = [("z_focus", "focus", "um", 1.0), ("fwhm", "FWHM", "nm", 1000.0), ("strehl", "Strehl", "", 1.0),
+_METRIC_ROWS = [("z_focus", "focus", "um", 1.0), ("fwhm", "FWHM perp.", "nm", 1000.0),
+                ("fwhm_par", "FWHM par.", "nm", 1000.0), ("strehl", "Strehl", "", 1.0),
                 ("eff_absolute", "abs. efficiency", "", 1.0), ("eff_relative", "rel. efficiency", "", 1.0)]
 
 
@@ -579,8 +591,8 @@ def _budget_section(eb):
             if mm:
                 parts.append(f"{name} {mm['mean_signed'] * 100:+.1f} %" if mm["relative"] else f"{name} {mm['mean_signed']:+.3f}")
         out.append(f"Model term from {', '.join(f'`{x}`' for x in m['files'])} (lens NA {m['record_NA']:.3f} >= this lens): "
-                   f"mean FDTD - LPA: {'; '.join(parts)}. The sign is systematic (the real lens focuses slightly "
-                   "closer and is slightly less efficient than predicted); the budget uses the largest magnitude.")
+                   f"mean FDTD - LPA: {'; '.join(parts)} (negative: the full-wave value is smaller). The budget uses "
+                   "the largest magnitude; a sign that is the same in every record is a systematic offset.")
         if eb["model_not_measured"]:
             out.append("No FDTD comparison exists for " + ", ".join(eb["model_not_measured"]) + ": their model term is not measured.")
     for g in eb["gaps"]:
@@ -694,9 +706,14 @@ def render_report(res):
     w(f"* Selection: {'robust rule for a ' + str(dg['sigma_nm']) + ' nm size error' if dg['selection'] == 'robust' else dg['selection']}; "
       "hyperbolic phase.\n")
     w("## R5 Performance (locally periodic approximation)\n")
-    w("| Focus (um) | FWHM (nm) | diffraction FWHM (nm) | Strehl | abs. efficiency | rel. efficiency |\n|---|---|---|---|---|---|")
-    w(f"| {pf['z_focus_um']:.3f} | {pf['fwhm_um']*1000:.0f} | {pf['diffraction_fwhm_um']*1000:.0f} | "
+    w("| Focus (um) | FWHM perp. / par. to E (nm) | diffraction FWHM (nm) | Strehl | abs. efficiency | rel. efficiency |\n|---|---|---|---|---|---|")
+    w(f"| {pf['z_focus_um']:.3f} | {pf['fwhm_um']*1000:.0f} / {pf['fwhm_par_um']*1000:.0f} | {pf['diffraction_fwhm_um']*1000:.0f} | "
       f"{pf['strehl']:.3f} | {pf['eff_absolute']:.3f} | {pf['eff_relative']:.3f} |")
+    sc_ = pf["scalar"]
+    w(f"\nFocal plane by vector propagation (y polarization; |Ez|^2 is {pf['Ez_fraction']*100:.1f} % of the plane's |E|^2). "
+      "Efficiencies are power-flow ratios: S_z through the disk of radius 3 x FWHM / incident power (absolute) or / power "
+      f"transmitted by the lens (relative). Scalar model for comparison: FWHM {sc_['fwhm_um']*1000:.0f} nm, absolute "
+      f"{sc_['eff_absolute']:.3f}, relative {sc_['eff_relative']:.3f} (|E_y|^2 over the computation window).")
     w(f"\nFresnel number {pf['fresnel_number']:.2f}" + (" (small: the intensity maximum lies before f)" if pf["fresnel_number"] < 5 else "") + ".")
     w("")
     if pf["error_budget"] is None:
@@ -706,9 +723,9 @@ def render_report(res):
     if res.get("field_of_view"):
         w(_fov_section(res["field_of_view"]))
     w("## R6 Process window\n")
-    w("| size bias (nm) | focus (um) | FWHM (nm) | Strehl | abs. efficiency |\n|---|---|---|---|---|")
+    w("| size bias (nm) | focus (um) | FWHM perp. / par. (nm) | Strehl | abs. efficiency |\n|---|---|---|---|---|")
     for r in pw["size_bias"]:
-        w(f"| {r['bias_nm']:+.1f} | {r['z_focus']:.3f} | {r['fwhm']*1000:.0f} | {r['strehl']:.3f} | {r['eff_absolute']:.3f} |")
+        w(f"| {r['bias_nm']:+.1f} | {r['z_focus']:.3f} | {r['fwhm']*1000:.0f} / {r['fwhm_par']*1000:.0f} | {r['strehl']:.3f} | {r['eff_absolute']:.3f} |")
     if pw["random_size"]:
         rr = pw["random_size"]
         w(f"\nRandom size error sigma = {rr['sigma_nm']} nm ({rr['n_trial']} trials, seed {rr['seed']}): focus "
@@ -740,9 +757,12 @@ def render_report(res):
           f"{r['n_sizes']} sizes max |dt| {_f(r['max_d_amp'], 4)}, max dphase {_f(r['max_d_phase_rad'], 3)} rad "
           f"({r['fdtd_steps']} FDTD steps/wavelength).")
     for r in va["V2"]:
+        eff = (f"relative efficiency (power flow) {_f(r['lpa_eff_relative'])} vs {_f(r['fdtd_eff_relative'])}"
+               if r["fdtd_eff_relative"] is not None else
+               "relative efficiency: no power-flow comparison in this record (its |E|^2 values used different "
+               "integration windows and are not used)")
         w(f"* V2 lens `{r['file']}` (D {r['D']:.2f} um, f {r['f']} um, {r['steps']} steps/wavelength): "
-          f"{'passed' if r['passed'] else 'not passed'}; focus LPA {_f(r['lpa_focus'])} vs FDTD {_f(r['fdtd_focus'])} um, "
-          f"relative efficiency {_f(r['lpa_eff_relative'])} vs {_f(r['fdtd_eff_relative'])}.")
+          f"{'passed' if r['passed'] else 'not passed'}; focus LPA {_f(r['lpa_focus'])} vs FDTD {_f(r['fdtd_focus'])} um; {eff}.")
     w("\nThe records validate the platform (material, wavelength, H, L, substrate), not this particular lens.\n")
     w("## R10 Traceability\n")
     w("`manifest.json` holds the code version and commit, the normalized specification and its hash, the "

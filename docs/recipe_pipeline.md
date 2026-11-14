@@ -77,14 +77,26 @@ focus, FWHM and relative efficiency; Strehl and absolute efficiency have no mode
 their totals are flagged as lower bounds. If no record covers the lens NA (the LPA error grows
 with NA) the model term is unknown, all totals are lower bounds, and the recipe stays at T1.
 The model term has a sign: for the 633 nm TiO2 platform the FDTD focus is 2-3 % shorter and
-the relative efficiency 2-3 points lower than predicted.
+the relative efficiency (power flow) 6-8 points lower than predicted.
+
+Definitions (roadmap P1): the focal plane is computed with vector propagation (Ex, Ey, Ez; y
+polarization). FWHM is given perpendicular and parallel to the polarization (Ez widens the
+spot along the polarization). Efficiencies are power-flow ratios: S_z through the disk of
+radius 3 x FWHM divided by the incident power (absolute) or by the power transmitted by the
+lens (relative). A |E|^2 ratio over the computation window is not used: it depends on the
+window and over-weights light at grazing angles, whose Ez is large but which carries little
+power. In the FDTD records the transmitted power is S_z through the near-field monitor, which
+covers the whole aperture.
 
 ## What the numbers mean
 
 * Performance and process-window numbers come from the locally periodic approximation (each
-  pillar simulated in an infinite array of identical neighbours) with scalar propagation. For
-  the 633 nm TiO2 recipe the small-lens FDTD comparison (V2) found the focus 2-3 % beyond the
-  FDTD focus and the relative efficiency 2.3-2.7 points above it; see the R8 section of a report.
+  pillar simulated in an infinite array of identical neighbours) with exact on-axis and vector
+  focal-plane propagation. For the 633 nm TiO2 recipe the small-lens FDTD comparison (V2) found
+  the focus 2-3 % beyond the FDTD focus, both FWHMs within 1.5-3.5 %, and the relative efficiency
+  (power flow) 5.7-8.0 points above it: the real lenses scatter more light to wide angles (the
+  FDTD focal monitor holds 92-93 % of the transmitted power, the LPA prediction 96-97 %). See the
+  R8 section of a report.
 * The validation records validate the *platform* (material, wavelength, H, L, substrate), not
   the particular lens of a recipe. They exist for vertical pillars without a residual film; a
   recipe with a tapered sidewall or a residual film has no applicable record.
