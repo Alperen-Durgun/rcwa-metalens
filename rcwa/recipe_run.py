@@ -269,7 +269,7 @@ def find_validation_records(vdir, plat, lam0, H, L, sidewall_deg=90.0, residual=
     the pillar profile, and all current ones are for vertical pillars without a residual film,
     so a tapered or residual-film recipe has no applicable record. Returns {"V1": [...],
     "V2": [...], "skipped_geometry": bool}."""
-    out = {"V1": [], "V2": [], "skipped_geometry": False}
+    out = {"V1": [], "V2": [], "V1a": [], "skipped_geometry": False}
     if vdir is None or not os.path.isdir(vdir):
         return out
     if sidewall_deg < 90.0 or residual:
@@ -278,7 +278,8 @@ def find_validation_records(vdir, plat, lam0, H, L, sidewall_deg=90.0, residual=
     for fn in sorted(os.listdir(vdir)):
         if not fn.endswith(".json"):
             continue
-        kind = "V1" if fn.startswith("V1") else "V2" if fn.startswith("V2") else None
+        kind = ("V1a" if fn.startswith("V1a") else "V1" if fn.startswith("V1") else
+                "V2" if fn.startswith("V2") else None)            # V1a: oblique unit cells (example 21)
         if kind is None:
             continue
         try:
@@ -294,7 +295,13 @@ def find_validation_records(vdir, plat, lam0, H, L, sidewall_deg=90.0, residual=
                 and abs(rec["n_sub"] - plat["n_sub"]) < 1e-6):
             continue
         item = {"file": fn, "sha256": _sha256_file(os.path.join(vdir, fn)), "passed": bool(rec.get("passed"))}
-        if kind == "V1":
+        if kind == "V1a":
+            ang = rec.get("angles", {})
+            item.update({"angles_deg": [a_["theta_deg"] for a_ in ang.values()],
+                         "max_d_amp": float(max(max(abs(v) for v in a_["d_amp"]) for a_ in ang.values())) if ang else None,
+                         "max_d_phase_rad": float(max(max(abs(v) for v in a_["d_phase_rad"]) for a_ in ang.values())) if ang else None,
+                         "pol": "TE", "fdtd_steps": rec.get("fdtd_steps")})
+        elif kind == "V1":
             da = np.abs(np.asarray(rec.get("d_amp", []), float)); dp = np.abs(np.asarray(rec.get("d_phase_rad", []), float))
             jm = np.asarray(rec.get("judged", [True] * len(da)), bool)
             item.update({"max_d_amp": float(da[jm].max()) if jm.any() else None,     # acceptance is on judged sizes
@@ -446,6 +453,9 @@ def run_recipe(spec, out_dir, validation_dir="auto", n_jobs=None, log=print):
                                 "first_order_exit_deg": al["first_order_exit_deg"]}
     else:
         res["field_of_view"] = None
+
+    if res["field_of_view"] is not None:
+        res["field_of_view"]["oblique_records"] = vrec["V1a"]
 
     log("[7/10] process window")
     sc = bud["scenarios"]; b = tol["bias_nm"]
@@ -626,7 +636,12 @@ def _fov_section(fv):
     if a_sub is not None:
         out.append(f"A first diffraction order of the period propagates in the substrate above {a_sub:.1f} deg "
                    "(reflected); its power is missing from the transmitted zeroth order.")
-    out.append("These off-axis numbers carry no error budget: the full-wave model check (V2) was done at normal "
+    for r in fv.get("oblique_records", []):
+        out.append(f"Oblique unit-cell FDTD record `{r['file']}` ({r['pol']}, {', '.join(f'{a:g}' for a in r['angles_deg'])} deg): "
+                   f"{'passed' if r['passed'] else 'FAILED'}; max |dt| {_f(r['max_d_amp'], 4)}, max dphase {_f(r['max_d_phase_rad'], 3)} rad.")
+    if not fv.get("oblique_records"):
+        out.append("No oblique unit-cell FDTD record exists for this platform.")
+    out.append("These off-axis lens numbers carry no error budget: the full-wave lens check (V2) was done at normal "
                "incidence only.\n")
     return "\n".join(out)
 

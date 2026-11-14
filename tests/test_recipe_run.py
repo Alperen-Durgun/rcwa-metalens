@@ -130,6 +130,13 @@ def test_validation_record_matching(tmp_path):
     tap = rr.find_validation_records(str(tmp_path), plat, 0.633, 0.6, 0.375, sidewall_deg=88.0)
     assert tap["skipped_geometry"] and tap["V1"] == [] and tap["V2"] == []
     assert rr.find_validation_records(None, plat, 0.633, 0.6, 0.375)["V1"] == []
+    # an oblique unit-cell record (example 21, "V1a") is listed separately, never as a normal-incidence V1
+    v1a = {"passed": True, "material": "TiO2_Siefke", "lam0": 0.633, "H": 0.6, "L": 0.375, "n_sub": 1.457,
+           "fdtd_steps": 20, "angles": {"20": {"theta_deg": 20.0, "d_amp": [0.001, -0.019], "d_phase_rad": [0.05, -0.01]}}}
+    (tmp_path / "V1a_x.json").write_text(json.dumps(v1a), encoding="utf-8")
+    oa = rr.find_validation_records(str(tmp_path), plat, 0.633, 0.6, 0.375)
+    assert [r["file"] for r in oa["V1a"]] == ["V1a_x.json"] and "V1a_x.json" not in [r["file"] for r in oa["V1"]]
+    assert oa["V1a"][0]["max_d_amp"] == pytest.approx(0.019) and oa["V1a"][0]["angles_deg"] == [20.0]
     # the pillar shape must match; records without "shape" are circular
     (tmp_path / "V1r_sq.json").write_text(json.dumps({**v1, "shape": "square"}), encoding="utf-8")
     sq = rr.find_validation_records(str(tmp_path), plat, 0.633, 0.6, 0.375, shape="square")

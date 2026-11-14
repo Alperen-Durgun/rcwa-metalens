@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Validated — angle-dependent library against FDTD (roadmap P2)
+
+* `examples/21` run (0.300 FC estimate): TiO2_Siefke 600/375 on silica, TE, sizes 100-290 nm,
+  10 and 20 deg (the -1 order propagates in the substrate at 20 deg). PASSED at both angles:
+  largest |d|t|| 0.019 (290 nm, 20 deg, where |t| drops to 0.70), largest dphase 0.054 rad,
+  fitted constant phase -0.04 / -0.03 rad. The projection ratio equals the plane-wave value
+  sin(kx L) / (kx L) to four digits (0.9318 / 0.7510), so the sign and the analysis are right.
+  Two 10-deg cells (250, 290 nm) did not decay fully (5e-4, 1.4e-4 vs the 1e-5 shutoff); both
+  pass with |d|t|| <= 0.0009. Record `validation/V1a_TiO2_Siefke_633_600_375_2026-11-14.json`.
+* Recipe pipeline: oblique records ("V1a") are listed separately and shown in the off-axis
+  section; before, a file name starting with "V1" would have been counted as a normal-incidence
+  unit-cell record. Example 20 takes `--shape square` (separate file names).
+
 ### Added — square pillars in the recipe pipeline (roadmap U3, first stage)
 
 * `unit_cell.shape: square` (C4 symmetric, one parameter, polarization independent at normal

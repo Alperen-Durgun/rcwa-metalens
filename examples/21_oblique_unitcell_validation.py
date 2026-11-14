@@ -9,8 +9,11 @@ in x; the plane-wave angle is exact at the analysis frequency.
 At oblique incidence the zeroth order of the transmitted field varies as exp(+-i kx x) over
 the cell, so t is the zeroth Fourier coefficient: <E_y exp(-+i kx x)>_cell (pillar) divided by
 the same for the bare interface. Which sign is the physical one depends on the solver's
-time convention; both projections are computed and the dominant one (the other is ~0) is
-used and recorded. RCWA side: rcwa.angular at M = 11, divided by its own bare interface.
+time convention; both projections are computed and the dominant one is used and recorded.
+The two are not orthogonal over one cell: for a pure exp(+i kx x) wave the other projection is
+sin(kx L) / (kx L) of the dominant one (0.931 at 10 deg, 0.752 at 20 deg for L = 375 nm), and
+the recorded ratio must equal that. RCWA side: rcwa.angular at M = 11, divided by its own bare
+interface.
 
 Acceptance as in V1: |d|t|| < 0.02 and |d phase| < 0.1 rad on every size, per angle; a
 constant phase per angle is fitted and reported (expected ~0).
@@ -134,12 +137,16 @@ for th in a.angles:
     dphi = np.angle(tr * np.conj(tf) * np.exp(-1j * offset)); damp = np.abs(tr) - np.abs(tf)
     ok = bool(np.all(np.abs(damp) < TOL_AMP) and np.all(np.abs(dphi) < TOL_PHASE)); ok_all &= ok
     ratio = min(abs(rp), abs(rm)) / max(abs(rp), abs(rm))
-    print(f"\ntheta {th:g} deg: projection sign {sign:+d} (other projection / dominant = {ratio:.1e}); "
+    kxL = 2 * np.pi / LAM0 * np.sin(np.deg2rad(th)) * L
+    expected = np.sin(kxL) / kxL                     # pure plane wave: projections differ by this factor
+    print(f"\ntheta {th:g} deg: projection sign {sign:+d} (other projection / dominant = {ratio:.4f}, "
+          f"pure plane wave {expected:.4f}); "
           f"fitted constant phase {offset:+.4f} rad -> {'PASSED' if ok else 'FAILED'}")
     for i, s in enumerate(a.sizes):
         print(f"  {s*1000:6.1f} nm  |t| RCWA {abs(tr[i]):.4f} FDTD {abs(tf[i]):.4f}  d|t| {damp[i]:+.4f}  dphase {dphi[i]:+.4f}")
     results[f"{th:g}"] = {"theta_deg": th, "theta_sub_deg": angular.substrate_angle(th, n_sub), "passed": ok,
-                          "projection_sign": sign, "other_projection_ratio": ratio, "phase_offset_rad": float(offset),
+                          "projection_sign": sign, "other_projection_ratio": ratio,
+                          "other_projection_ratio_plane_wave": float(expected), "phase_offset_rad": float(offset),
                           "t_rcwa": [[z.real, z.imag] for z in tr], "t_fdtd": [[z.real, z.imag] for z in tf],
                           "d_amp": damp.tolist(), "d_phase_rad": dphi.tolist(),
                           "extra_orders": angular.orders_at(th, LAM0, L, n_sub)}

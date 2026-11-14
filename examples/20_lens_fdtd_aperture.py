@@ -21,6 +21,7 @@ utf8_stdio()
 ap = argparse.ArgumentParser()
 ap.add_argument("--D", type=float, default=6.0); ap.add_argument("--f", type=float, default=6.0)
 ap.add_argument("--material", default="TiO2_Siefke"); ap.add_argument("--lam0", type=float, default=0.633)
+ap.add_argument("--shape", default="circle", choices=["circle", "square"])
 ap.add_argument("--H", type=float, default=0.60); ap.add_argument("--L", type=float, default=0.375)
 ap.add_argument("--substrate", default="SiO2_Malitson"); ap.add_argument("--steps", type=int, default=15)
 ap.add_argument("--run-time", type=float, default=3e-13)
@@ -29,7 +30,7 @@ a = ap.parse_args()
 LAM0, L, H, D, F = a.lam0, a.L, a.H, a.D, a.f
 n_sub = float(np.sqrt(materials.eps_of(a.substrate, LAM0)).real)
 
-d = design.design_lens(LAM0, L, H, D, F, material=a.material, n_sub=n_sub, certify=True)
+d = design.design_lens(LAM0, L, H, D, F, shape=a.shape, material=a.material, n_sub=n_sub, certify=True)
 an = design.analyze_focus(d)
 lpa = {"z_focus": an["z_focus"], "fwhm": an["fwhm"], "eff_relative": an["eff_relative"],
        "eff_absolute": an["eff_absolute"], "strehl": an["strehl"], "NA": d["NA"]}
@@ -55,7 +56,8 @@ slab = td.Box(center=(0, 0, z_base + t_ap / 2), size=(td.inf, td.inf, t_ap))
 hole = td.Cylinder(center=(0, 0, z_base + t_ap / 2), radius=Dl / 2 + L / 2, length=2 * t_ap, axis=2)
 structs.append(td.Structure(geometry=td.ClipOperation(operation="difference", geometry_a=slab, geometry_b=hole),
                             medium=td.PEC))
-geoms = [td.Cylinder(center=(p["x"], p["y"], z_p), radius=float(p["params"]) / 2, length=H, axis=2) for p in d["placements"]]
+geoms = [td.Cylinder(center=(p["x"], p["y"], z_p), radius=float(p["params"]) / 2, length=H, axis=2) if a.shape == "circle"
+         else td.Box(center=(p["x"], p["y"], z_p), size=(float(p["params"]), float(p["params"]), H)) for p in d["placements"]]
 structs.append(td.Structure(geometry=td.GeometryGroup(geometries=geoms), medium=pm))
 zf_lpa = z_exit + lpa["z_focus"]
 Z_NEAR = 0.05   # near-field plane above the pillar tops (um)
@@ -68,11 +70,12 @@ sim = td.Simulation(size=(sx, sx, sz), grid_spec=td.GridSpec.auto(min_steps_per_
                                           source_time=td.GaussianPulse(freq0=freq0, fwidth=freq0 / 8),
                                           direction="+", pol_angle=np.pi / 2)],
                     monitors=mons, run_time=a.run_time, boundary_spec=td.BoundarySpec.all_sides(td.PML()))
-PATH = os.path.join("workspace", f"tidy3d_V2_D{D:g}_f{F:g}.hdf5")
+SFX = "" if a.shape == "circle" else "_" + a.shape          # circle keeps the original file names
+PATH = os.path.join("workspace", f"tidy3d_V2_D{D:g}_f{F:g}{SFX}.hdf5")
 if a.load:
     data = td.SimulationData.from_file(PATH); cost = float("nan")
 else:
-    job = web.Job(simulation=sim, task_name=f"rcwa_V2_D{D:g}_f{F:g}")
+    job = web.Job(simulation=sim, task_name=f"rcwa_V2_D{D:g}_f{F:g}{SFX}")
     cost = job.estimate_cost(); print(f"*** Estimated cost: {cost:.3f} FlexCredit ***", flush=True)
     if not a.run:
         sys.exit("Estimate only. Add --run to spend credits.")
@@ -264,9 +267,9 @@ if "eff_relative_Sz" in fd:
 print(f"  final field decay {getattr(data, 'final_decay_value', float('nan')):.1e}")
 print(f"\nV2 {'PASSED' if ok else 'FAILED'} (focus within 3 %, FWHM within 5 %)")
 os.makedirs("validation", exist_ok=True)
-out = os.path.join("validation", f"V2_lens_D{D:g}_f{F:g}_{a.material}_{datetime.date.today().isoformat()}.json")
+out = os.path.join("validation", f"V2_lens_D{D:g}_f{F:g}{SFX}_{a.material}_{datetime.date.today().isoformat()}.json")
 json.dump({"passed": ok, "lpa": lpa, "fdtd": fd, "D": Dl, "f": F, "L": L, "H": H, "n_sub": n_sub,
-           "lam0": LAM0, "shape": "circle", "material": a.material, "steps": a.steps, "run_time": a.run_time, "estimated_cost_fc": float(cost),
+           "lam0": LAM0, "shape": a.shape, "material": a.material, "steps": a.steps, "run_time": a.run_time, "estimated_cost_fc": float(cost),
            "aperture": "PEC film, hole radius D/2 + L/2", "tidy3d_version": td.__version__,
            "final_decay": float(getattr(data, "final_decay_value", np.nan)), "diagnostic": diag}, open(out, "w"), indent=1)
 print(f"Record written: {out}")
