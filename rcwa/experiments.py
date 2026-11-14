@@ -1223,6 +1223,7 @@ def run_recipe(fm, slug):
 def recipe_note_body(res, out):
     """Report-note body of a recipe: trust level, performance with its budget, where the files
     are, then the full report.md (headings moved below the note sections)."""
+    from urllib.parse import quote
     perf = res.get("performance") or {}
     bud = perf.get("error_budget") or {}
     tot = bud.get("total") or {}
@@ -1247,7 +1248,7 @@ def recipe_note_body(res, out):
             lines.append(f"| {label} | {v * sc:.4g} {unit} | {b} |")
     d = os.path.abspath(out)
     lines += ["", f"- **Recipe folder:** `{d}` — `report.md`, `recipe.json`, `lens.gds` (mask), `manifest.json`",
-              f"- Open: [recipe folder](file:///{d.replace(os.sep, '/').lstrip('/')})"]
+              f"- Open: [recipe folder](file:///{quote(d.replace(os.sep, '/').lstrip('/'), safe='/:')})"]
     rp = os.path.join(out, "report.md")
     if os.path.isfile(rp):
         with open(rp, encoding="utf-8") as f:
