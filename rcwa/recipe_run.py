@@ -54,7 +54,10 @@ SPEC_FIELDS = {
     "numerics": {"M": (int, 9, False), "n_sizes": (int, 20, False)},
     "field_of_view": {"angles_deg": (list, None, False), "pol": (str, "TE", False)},
 }
-SHAPES = ("circle",)                             # roadmap U3 adds more
+# Single-parameter, C4-symmetric pillars (polarization-independent at normal incidence; the size is
+# the diameter or the side). Two-parameter shapes (rect, ellipse, cross) need size errors and DRC
+# applied to every dimension - not yet supported by the pipeline (roadmap U3, second stage).
+SHAPES = ("circle", "square")
 
 
 class SpecError(ValueError):
@@ -259,9 +262,10 @@ def choose_unit_cell(spec, plat, drc, n_jobs=None, log=print):
     return rows, chosen
 
 
-def find_validation_records(vdir, plat, lam0, H, L, sidewall_deg=90.0, residual=None):
+def find_validation_records(vdir, plat, lam0, H, L, sidewall_deg=90.0, residual=None, shape="circle"):
     """Step 8 (R8): full-wave records in vdir that apply to this platform. A record applies when
-    material, wavelength, pillar height, period and substrate index match; records do not store
+    pillar shape, material, wavelength, pillar height, period and substrate index match (records
+    without a "shape" key were all made with circular pillars); records do not store
     the pillar profile, and all current ones are for vertical pillars without a residual film,
     so a tapered or residual-film recipe has no applicable record. Returns {"V1": [...],
     "V2": [...], "skipped_geometry": bool}."""
@@ -285,7 +289,7 @@ def find_validation_records(vdir, plat, lam0, H, L, sidewall_deg=90.0, residual=
         need = ("material", "lam0", "H", "L", "n_sub")
         if any(k not in rec for k in need):
             continue
-        if not (rec["material"] == plat["material"] and abs(rec["lam0"] - lam0) < 1e-9
+        if not (rec.get("shape", "circle") == shape and rec["material"] == plat["material"] and abs(rec["lam0"] - lam0) < 1e-9
                 and abs(rec["H"] - H) < 1e-9 and abs(rec["L"] - L) < 1e-9
                 and abs(rec["n_sub"] - plat["n_sub"]) < 1e-6):
             continue
@@ -405,7 +409,8 @@ def run_recipe(spec, out_dir, validation_dir="auto", n_jobs=None, log=print):
                      "sigma_nm": tol["sigma_nm"], "phase_offset_rad": float(d["offset"]),
                      "sizes_used_um": [float(s) for s in used]}
 
-    vrec = find_validation_records(validation_dir, plat, lam0, H, L, fab["sidewall_deg"], residual)
+    vrec = find_validation_records(validation_dir, plat, lam0, H, L, fab["sidewall_deg"], residual,
+                                   shape=spec["unit_cell"]["shape"])
     vrec["dir"] = _display_path(validation_dir, pkg_root) if validation_dir else None
 
     log("[6/10] performance (LPA) and error budget")
@@ -676,6 +681,10 @@ def render_report(res):
     w("## R2 Unit cell\n")
     w(f"* Shape {s['unit_cell']['shape']}, height H = {u['H']} um, period L = {u['L']} um, "
       f"sidewall {s['fabrication']['sidewall_deg']} deg, residual film {s['fabrication']['residual'] or 'none'}.")
+    if s["unit_cell"]["shape"] == "square":
+        w("* Square pillars are modelled with sharp corners; lithography and etching round them (radius typically "
+          "tens of nm), which is not modelled - a corner-rounding study or a full-wave check of the fabricated profile "
+          "is advised.")
     w(f"* Size range {lb['size_range_um'][0]*1000:.0f}-{lb['size_range_um'][1]*1000:.0f} nm "
       f"(min feature {res['drc_profile']['min_feature_um']*1000:.0f} nm, min gap {res['drc_profile']['min_gap_um']*1000:.0f} nm); "
       f"aspect ratio {u['aspect']:.1f} (limit {res['drc_profile']['max_aspect']}).")

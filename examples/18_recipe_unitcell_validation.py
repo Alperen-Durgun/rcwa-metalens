@@ -1,4 +1,5 @@
-"""Example 18 — FDTD validation of a unit-cell RECIPE (any material, wavelength, H, L, substrate).
+"""Example 18 — FDTD validation of a unit-cell RECIPE (any material, wavelength, H, L, substrate;
+circular or square pillars, --shape).
 
 Generalizes example 17 (V1) to the recipes found by the `recipe_search` generator:
 
@@ -40,14 +41,14 @@ ap.add_argument("--run-time", type=float, default=2.0e-12, help="FDTD run time (
 ap.add_argument("--offset", type=float, default=None, help="use this constant phase (rad) instead of fitting it")
 ap.add_argument("--tag", default="", help="suffix of the result folder and record")
 a = ap.parse_args()
-if a.shape != "circle":
-    sys.exit("only circular pillars are set up for FDTD here")
+if a.shape not in ("circle", "square"):
+    sys.exit("circular and square pillars are set up for FDTD here")
 LAM0, L, H, MAT = a.lam0, a.L, a.H, a.material
 n_sub = float(np.sqrt(materials.eps_of(a.substrate, LAM0)).real) if a.substrate not in ("", "air") else 1.0
 TOL_AMP, TOL_PHASE = 0.02, 0.1
 
 # ----------------------------------------------------------------------------- RCWA (free)
-base = design.meta_atom_library(LAM0, L, H, sizes=np.linspace(a.s_min, L - a.min_gap, 16),
+base = design.meta_atom_library(LAM0, L, H, sizes=np.linspace(a.s_min, L - a.min_gap, 16), shape=a.shape,
                                 material=MAT, n_sub=n_sub)
 lib = design.refine_library(base)
 res = lib["resonances"]
@@ -68,7 +69,7 @@ all_sizes = sizes + ([near] if near else [])
 if a.sizes:                                             # explicit sizes: judged unless near a resonance
     all_sizes = [float(v) for v in a.sizes]
     judged = [v for v in all_sizes if all((v < r["lo"] - a.keep_away * 1e-3) or (v > r["hi"] + a.keep_away * 1e-3) for r in res)]
-t_hi = design.meta_atom_library(LAM0, L, H, sizes=all_sizes, material=MAT, n_sub=n_sub, M=a.M)["t"]
+t_hi = design.meta_atom_library(LAM0, L, H, sizes=all_sizes, shape=a.shape, material=MAT, n_sub=n_sub, M=a.M)["t"]
 t_bare = design.meta_atom_library(LAM0, L, H, sizes=[0.1], n_pillar=1.0, n_sub=n_sub, M=a.M)["t"][0]
 t_rcwa = t_hi / t_bare
 n_p = complex(lib["n"])
@@ -101,8 +102,9 @@ bounds = td.BoundarySpec(x=td.Boundary.periodic(), y=td.Boundary.periodic(), z=t
 
 
 def make_sim(size, steps):
-    st = [substrate] + ([] if size is None else [td.Structure(
-        geometry=td.Cylinder(center=(0, 0, z_p), radius=size / 2, length=H, axis=2), medium=pillar_medium)])
+    geo = (td.Cylinder(center=(0, 0, z_p), radius=size / 2, length=H, axis=2) if a.shape == "circle"
+           else td.Box(center=(0, 0, z_p), size=(size, size, H))) if size is not None else None
+    st = [substrate] + ([] if size is None else [td.Structure(geometry=geo, medium=pillar_medium)])
     return td.Simulation(size=(L, L, sz), grid_spec=td.GridSpec.auto(min_steps_per_wvl=steps),
                          structures=st, sources=[source], monitors=[monitor], run_time=a.run_time,
                          boundary_spec=bounds)
@@ -111,13 +113,15 @@ def make_sim(size, steps):
 sims = {"bare": make_sim(None, a.steps)}
 for s in all_sizes:
     sims[f"s_{s*1000:.1f}"] = make_sim(s, a.steps)
-PATH_DIR = os.path.join("workspace", "tidy3d_recipe" + (f"_{a.tag}" if a.tag else ""))
+PATH_DIR = os.path.join("workspace", "tidy3d_recipe" + ("" if a.shape == "circle" else "_" + a.shape)
+                        + (f"_{a.tag}" if a.tag else ""))
 if a.load:
     batch = web.Batch.from_file(os.path.join(PATH_DIR, "batch.hdf5"))
     data = batch.load(path_dir=PATH_DIR); cost = float("nan")
     print("\nLoaded the finished batch from disk (no new run).")
 else:
-    batch = web.Batch(simulations=sims, folder_name="rcwa_recipe_unitcell" + (f"_{a.tag}" if a.tag else ""))
+    batch = web.Batch(simulations=sims, folder_name="rcwa_recipe_unitcell" + ("" if a.shape == "circle" else "_" + a.shape)
+                      + (f"_{a.tag}" if a.tag else ""))
     cost = batch.estimate_cost()
     print(f"\n{len(sims)} simulations. *** Estimated cost: {cost:.3f} FlexCredit ***")
     if not a.run:
@@ -147,8 +151,9 @@ for i, s in enumerate(all_sizes):
     print(f"  {s*1000:6.1f} nm  |t| RCWA {abs(t_rcwa[i]):.4f} FDTD {abs(t_fdtd[i]):.4f}  d|t| {damp[i]:+.4f}  dphase {dphi[i]:+.4f}  {v}")
 print(f"\nRECIPE UNIT-CELL VALIDATION {'PASSED' if ok else 'FAILED'}")
 os.makedirs("validation", exist_ok=True)
-out = os.path.join("validation", f"V1r_{MAT}_{LAM0*1000:.0f}_{H*1000:.0f}_{L*1000:.0f}{'_' + a.tag if a.tag else ''}_{datetime.date.today().isoformat()}.json")
-json.dump({"passed": ok, "material": MAT, "lam0": LAM0, "H": H, "L": L, "n_sub": n_sub, "M": a.M,
+out = os.path.join("validation", f"V1r_{MAT}_{LAM0*1000:.0f}_{H*1000:.0f}_{L*1000:.0f}"
+                   f"{'' if a.shape == 'circle' else '_' + a.shape}{'_' + a.tag if a.tag else ''}_{datetime.date.today().isoformat()}.json")
+json.dump({"passed": ok, "shape": a.shape, "material": MAT, "lam0": LAM0, "H": H, "L": L, "n_sub": n_sub, "M": a.M,
            "fdtd_steps": a.steps, "sizes_um": all_sizes, "judged": jm.tolist(),
            "t_rcwa": [[z.real, z.imag] for z in t_rcwa], "t_fdtd": [[z.real, z.imag] for z in t_fdtd],
            "phase_offset_rad": float(offset), "d_amp": damp.tolist(), "d_phase_rad": dphi.tolist(),

@@ -13,7 +13,7 @@ lens:
   focal_um: 40.0                 # NA = sin(atan(D / 2f)); the period must satisfy L <= lam0 / (2 NA)
 
 unit_cell:                       # either a fixed cell ...
-  shape: circle
+  shape: circle                  # circle or square (both one-parameter, polarization independent)
   height_um: 0.60
   period_um: 0.375
 # search:                        # ... or a search (then leave unit_cell height/period out);

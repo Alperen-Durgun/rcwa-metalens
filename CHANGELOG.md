@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Added — square pillars in the recipe pipeline (roadmap U3, first stage)
+
+* `unit_cell.shape: square` (C4 symmetric, one parameter, polarization independent at normal
+  incidence - checked: tx(x pol) = ty(y pol) to 1e-10). Raster, GDS, DRC gap (L - s along the
+  axes, exact on a square lattice) and the symmetry-reduced solver already handled squares.
+* 633 nm TiO2 platform, square vs circle (H 600 / L 375 nm): phase coverage 1.12 vs 1.05 x 2pi,
+  robust FOM 0.950 vs 0.948, 1 vs 8 uncertified sizes. At H = 500 nm the square closes the
+  phase circle (largest gap 0.29 rad, FOM 0.938) where the circle does not (1.02 rad).
+* Reports note that square corners are modelled sharp (fabrication rounds them; not modelled).
+* Validation records now match on the pillar shape too (records without "shape" are circular,
+  as every FDTD example used cylinders); example 18 runs square cells (`--shape square`) and all
+  FDTD examples write the shape into their records. No square record exists yet, so square
+  recipes are T1.
+* Two-parameter shapes (rect, ellipse, cross) are refused by the pipeline for now: size errors,
+  sidewall taper and the DRC minimum feature act on one dimension only (second stage of U3).
+
 ### Added — vector focal-plane propagation and power-flow efficiencies (roadmap P1)
 
 * `FocalField.vector_plane(z, pol)`: Ex, Ey, Ez (div E = 0), H = k x E / k0, S_z. Checks: one

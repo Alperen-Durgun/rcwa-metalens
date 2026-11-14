@@ -149,7 +149,7 @@ print(f"\nOBLIQUE UNIT-CELL VALIDATION {'PASSED' if ok_all else 'FAILED'}")
 os.makedirs("validation", exist_ok=True)
 out = os.path.join("validation", f"V1a_{MAT}_{LAM0*1000:.0f}_{H*1000:.0f}_{L*1000:.0f}"
                    f"{'_' + a.tag if a.tag else ''}_{datetime.date.today().isoformat()}.json")
-json.dump({"passed": ok_all, "kind": "oblique unit cell (TE)", "material": MAT, "lam0": LAM0, "H": H, "L": L,
+json.dump({"passed": ok_all, "kind": "oblique unit cell (TE)", "shape": "circle", "material": MAT, "lam0": LAM0, "H": H, "L": L,
            "n_sub": n_sub, "M": a.M, "fdtd_steps": a.steps, "sizes_um": list(a.sizes), "angles": results,
            "estimated_cost_fc": float(cost), "run_time_s": a.run_time,
            "final_decay": {k: (float(v) if v is not None else None) for k, v in decay.items()},

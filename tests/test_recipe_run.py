@@ -53,6 +53,7 @@ def test_spec_defaults_and_normalization():
     ({"unit_cell": None}, "no unit cell"),
     ({"search": {"height_um": [0.6], "period_um": [0.35]}}, "either unit_cell"),
     ({"unit_cell": {"shape": "star"}}, "unit_cell.shape"),
+    ({"unit_cell": {"shape": "cross", "height_um": 0.6, "period_um": 0.375}}, "unit_cell.shape"),
     ({"fabrication": {"residual": ["TiO2_Siefke"]}}, "residual must be"),
     ({"field_of_view": {"angles_deg": [10, 95]}}, "angles_deg must be in [0, 90)"),
     ({"field_of_view": {"angles_deg": [10], "pol": "XY"}}, "field_of_view.pol"),
@@ -129,6 +130,11 @@ def test_validation_record_matching(tmp_path):
     tap = rr.find_validation_records(str(tmp_path), plat, 0.633, 0.6, 0.375, sidewall_deg=88.0)
     assert tap["skipped_geometry"] and tap["V1"] == [] and tap["V2"] == []
     assert rr.find_validation_records(None, plat, 0.633, 0.6, 0.375)["V1"] == []
+    # the pillar shape must match; records without "shape" are circular
+    (tmp_path / "V1r_sq.json").write_text(json.dumps({**v1, "shape": "square"}), encoding="utf-8")
+    sq = rr.find_validation_records(str(tmp_path), plat, 0.633, 0.6, 0.375, shape="square")
+    assert [r["file"] for r in sq["V1"]] == ["V1r_sq.json"] and sq["V2"] == []
+    assert "V1r_sq.json" not in [r["file"] for r in rr.find_validation_records(str(tmp_path), plat, 0.633, 0.6, 0.375)["V1"]]
 
 
 def test_repository_validation_records_have_the_match_keys():
@@ -283,3 +289,29 @@ def test_display_path_handles_other_drives(monkeypatch, tmp_path):
         raise ValueError("path is on mount 'D:', start on mount 'C:'")
     monkeypatch.setattr(rr.os.path, "relpath", boom)
     assert rr._display_path(str(root / "validation"), str(root)) == os.path.abspath(str(root / "validation"))
+
+
+def test_square_pillars_are_polarization_independent():
+    """C4-symmetric square pillar at normal incidence: x and y polarization see the same t."""
+    from rcwa import design, solve_rcwa_2d
+    n = design.pillar_index("TiO2_Siefke", 0.633)
+    lay = design.pillar_layers("square", 0.22, 0.375, 0.6, 128, n, 1.0)
+    ty = solve_rcwa_2d(0.633, 0, 0, 1.457 ** 2, 1.0, 0.375, 0.375, lay, 5, 5, pol=(0., 1.))
+    tx = solve_rcwa_2d(0.633, 0, 0, 1.457 ** 2, 1.0, 0.375, 0.375, lay, 5, 5, pol=(1., 0.))
+    assert abs(ty["ty"][ty["i0"]] - tx["tx"][tx["i0"]]) < 1e-10
+
+
+def test_square_recipe_end_to_end(tmp_path):
+    """A square-pillar recipe runs through the pipeline: certified library, DRC clean, GDS read back,
+    no circular-pillar record is taken for it, and the report flags the unmodelled corner rounding."""
+    s = _spec(unit_cell={"shape": "square", "height_um": 0.60, "period_um": 0.375})
+    vdir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "validation")
+    r = rr.run_recipe(s, str(tmp_path / "sq"), validation_dir=vdir, log=lambda *a: None)
+    assert r["status"] == "ok" and r["trust"]["level"] == "T1"
+    assert r["validation"]["V1"] == [] and r["validation"]["V2"] == []         # all records are circular
+    assert r["library"]["certificate"]["used_sizes_certified"] and r["fabrication"]["drc"]["ok"]
+    if r["fabrication"]["gds_readback"] is not None:
+        assert r["fabrication"]["gds_readback"]["matches"]
+    assert r["library"]["coverage_2pi"] > 1.0
+    rep = (tmp_path / "sq" / "report.md").read_text(encoding="utf-8")
+    assert "sharp corners" in rep and "Shape square" in rep
