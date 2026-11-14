@@ -13,7 +13,9 @@ Generalizes example 17 (V1) to the recipes found by the `recipe_search` generato
     (zeroth order); both sides in the physics convention. A constant phase is still fitted
     and reported - with the bare-interface reference it should be close to zero.
 
-Acceptance as in V1: |d|t|| < 0.02 and |d phase| < 0.1 rad on the judged sizes.
+Acceptance as in V1: |d|t|| < 0.02 and |d phase| < 0.1 rad on the judged sizes. The constant
+phase is fitted on the judged sizes; sizes that fail on their own are left out of that fit
+(and still fail), so a single outlier cannot shift the others (both fits are recorded).
 
 Usage (inside the .venv, repository root):
   python examples/18_recipe_unitcell_validation.py --material TiO2_Siefke --lam0 0.633 --H 0.60 --L 0.375
@@ -140,11 +142,26 @@ def mean_Ey(d):
 ref = mean_Ey(data["bare"])
 t_fdtd = np.array([mean_Ey(data[f"s_{s*1000:.1f}"]) / ref for s in all_sizes])
 jm = np.array([s in judged for s in all_sizes])
-offset = a.offset if a.offset is not None else np.angle(np.sum(t_rcwa[jm] * np.conj(t_fdtd[jm])))
 decay = {k: getattr(data[k], "final_decay_value", None) for k in sims}
-dphi = np.angle(t_rcwa * np.conj(t_fdtd) * np.exp(-1j * offset)); damp = np.abs(t_rcwa) - np.abs(t_fdtd)
+damp = np.abs(t_rcwa) - np.abs(t_fdtd)
+offset_all = float(np.angle(np.sum(t_rcwa[jm] * np.conj(t_fdtd[jm]))))
+# robust constant phase: judged sizes that fail on their own are left out of the fit (they still FAIL);
+# one outlier (e.g. a resonance the two solvers place differently) must not shift every other size
+fit = jm.copy(); offset = offset_all
+for _ in range(len(all_sizes)):                  # leave out the single worst size per step
+    dphi = np.angle(t_rcwa * np.conj(t_fdtd) * np.exp(-1j * offset))
+    viol = np.where(fit, np.maximum(np.abs(damp) / TOL_AMP, np.abs(dphi) / TOL_PHASE), 0.0)
+    if viol.max() < 1 or fit.sum() <= 2:
+        break
+    fit[int(np.argmax(viol))] = False
+    offset = float(np.angle(np.sum(t_rcwa[fit] * np.conj(t_fdtd[fit]))))
+if a.offset is not None:
+    offset = a.offset
+dphi = np.angle(t_rcwa * np.conj(t_fdtd) * np.exp(-1j * offset))
 ok = bool(np.all(np.abs(damp[jm]) < TOL_AMP) and np.all(np.abs(dphi[jm]) < TOL_PHASE))
-print(f"\nRESULT ({'given' if a.offset is not None else 'fitted'} constant phase {offset:+.4f} rad; expected ~0 with the bare-interface reference)")
+print(f"\nRESULT ({'given' if a.offset is not None else 'fitted'} constant phase {offset:+.4f} rad; expected ~0 with the bare-interface reference;"
+      f" fit over all judged sizes: {offset_all:+.4f} rad, sizes left out of the fit: "
+      f"{[round(s * 1000, 1) for s, f, j in zip(all_sizes, fit, jm) if j and not f] or 'none'})")
 print("  final field decay per task (shutoff 1e-5): " + ", ".join(f"{k}={v:.1e}" for k, v in decay.items() if v is not None))
 for i, s in enumerate(all_sizes):
     v = ("PASS" if abs(damp[i]) < TOL_AMP and abs(dphi[i]) < TOL_PHASE else "FAIL") if jm[i] else "reported"
@@ -156,7 +173,8 @@ out = os.path.join("validation", f"V1r_{MAT}_{LAM0*1000:.0f}_{H*1000:.0f}_{L*100
 json.dump({"passed": ok, "shape": a.shape, "material": MAT, "lam0": LAM0, "H": H, "L": L, "n_sub": n_sub, "M": a.M,
            "fdtd_steps": a.steps, "sizes_um": all_sizes, "judged": jm.tolist(),
            "t_rcwa": [[z.real, z.imag] for z in t_rcwa], "t_fdtd": [[z.real, z.imag] for z in t_fdtd],
-           "phase_offset_rad": float(offset), "d_amp": damp.tolist(), "d_phase_rad": dphi.tolist(),
+           "phase_offset_rad": float(offset), "phase_offset_all_judged_rad": offset_all,
+           "offset_fit_sizes_um": [s for s, f in zip(all_sizes, fit) if f], "d_amp": damp.tolist(), "d_phase_rad": dphi.tolist(),
            "estimated_cost_fc": float(cost), "run_time_s": a.run_time, "phase_offset_given": a.offset is not None,
            "final_decay": {k: (float(v) if v is not None else None) for k, v in decay.items()},
            "tidy3d_version": td.__version__}, open(out, "w"), indent=1)

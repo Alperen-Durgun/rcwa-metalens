@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Changed — example 18: robust constant-phase fit
+
+* The constant phase between RCWA and FDTD is fitted on the judged sizes; a size that fails on
+  its own is now left out of that fit (one at a time, the worst first) and still fails. Before,
+  one outlier shifted every other size: in the first square-pillar run a resonance placed
+  differently by the two solvers (272.5 nm) moved the fit from -0.026 to -0.117 rad and made
+  two good sizes fail. Both fits are recorded. The circle records are unaffected (no outlier;
+  same offset to 1e-6).
+* Square-pillar unit cells (633 nm TiO2 600/375): at 20 FDTD steps per wavelength the gap
+  resonance next to 280 nm sits about one FDTD cell (~13 nm) lower than in RCWA (FDTD |t| 0.61
+  vs 0.98 at 272.5 nm); RCWA is converged there (M 9 to 17 unchanged) and FDTD at 40 steps agrees
+  (0.965 vs 0.977, -0.02 rad). Sharp-cornered pillars near a gap resonance need >= 40 steps.
+  The full square validation at 40 steps follows.
+
 ### Validated — angle-dependent library against FDTD (roadmap P2)
 
 * `examples/21` run (0.300 FC estimate): TiO2_Siefke 600/375 on silica, TE, sizes 100-290 nm,
