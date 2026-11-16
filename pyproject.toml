@@ -32,6 +32,7 @@ dependencies = [
     "autograd",
     "gdstk",
     "pyyaml",
+    "scikit-learn",   # Gaussian process of the Bayesian cell optimizer
 ]
 
 [project.optional-dependencies]

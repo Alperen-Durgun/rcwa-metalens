@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added — parametrized meta-cell optimization (`rcwa/cellopt.py`)
+
+* Free shape parameters with bounds, targets on the zeroth-order Jones response (abs, re, im,
+  power, phase; ratios such as `txx/tyy` for the retardance), weighted cost, full 2D RCWA per
+  cell. Optimizers: grid, Bayesian (GP + expected improvement), CMA-ES, differential evolution,
+  genetic, particle swarm, simulated annealing, finite-difference gradient descent; bounded,
+  seeded, stop at a cost or an evaluation budget, full history.
+* Experiment type `cell_optimize` for request notes; report with the cost history, the
+  evaluated points and the Jones elements of the best cell.
+* Tests: every optimizer on a bowl, CMA-ES and DE on Rosenbrock, reproducibility, stop
+  condition, cost definitions, `cell_jones` against the library and under a 90 deg rotation,
+  a one-parameter cell against a direct sweep.
+* Benchmark (docs/cell_optimization.md): half-wave-plate rectangle at 633 nm, the Bayesian
+  optimizer reaches the 441-cell grid optimum after 9 cells.
+
 ### Added — recipes from request notes (Obsidian experiment loop)
 
 * Experiment type `recipe`: a note with `deney_tipi: recipe` (or `experiment_type: recipe`) and

@@ -1258,6 +1258,73 @@ def recipe_note_body(res, out):
     return "\n".join(lines)
 
 
+def _parse_vars(s):
+    out = {}
+    for part in [p for p in re.split(r"[,;]", s) if p.strip()]:
+        k, rng = part.split("=", 1); lo, hi = rng.split(":", 1)
+        out[k.strip()] = (float(lo), float(hi))
+    return out
+
+
+def _parse_targets(s):
+    """'txx/tyy phase 180; txx power 1 [weight]' -> Targets (phase in degrees in notes)."""
+    from .cellopt import Target
+    ts = []
+    for part in [p.strip() for p in s.split(";") if p.strip()]:
+        w = part.split()
+        val = float(w[2]); val = np.deg2rad(val) if w[1] == "phase" else val
+        ts.append(Target(w[0], w[1], val, float(w[3]) if len(w) > 3 else 1.0))
+    return ts
+
+
+def run_cell_optimize(fm, slug):
+    """PARAMETRIZED META-CELL OPTIMIZATION: free shape parameters with bounds, targets on the
+    zeroth-order Jones response (full RCWA), one of several optimizers (rcwa/cellopt.py)."""
+    from . import cellopt as co
+    lam0 = num(fm, "lam0", 0.633); L = num(fm, "period", RECIPE["period"]); H = num(fm, "height", RECIPE["height"])
+    mat = fm.get("material", RECIPE["material"])
+    n_p = complex(np.sqrt(materials.eps_of(mat, lam0)))
+    n_sub = _substrate_index(fm, lam0)
+    shape = fm.get("shape", "rect")
+    var = _parse_vars(fm.get("vars", "p0=0.06:0.315, p1=0.06:0.315"))
+    tg = _parse_targets(fm.get("targets", "txx/tyy phase 180; txx power 1; tyy power 1"))
+    fixed = {k[4:]: float(v) for k, v in fm.items() if k.startswith("fix_")}
+    opt = fm.get("optimizer", "bayesian")
+    r = co.optimize_cell(shape, var, tg, lam0, L, H, n_p, n_sub=n_sub, n_exit=1.0, M=int(num(fm, "M", 9, int)),
+                         N=int(num(fm, "N", 256, int)), fixed=fixed, optimizer=opt,
+                         max_evals=int(num(fm, "max_evals", 60, int)), stop=num(fm, "stop", 1e-3),
+                         seed=int(num(fm, "seed", 0, int)))
+    c = np.array([h[1] for h in r["history"]])
+    fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
+    ax[0].plot(np.arange(1, len(c) + 1), c, ".", color="0.6", label="evaluated")
+    ax[0].plot(np.arange(1, len(c) + 1), np.minimum.accumulate(c), "-", color="C0", label="best so far")
+    ax[0].set_yscale("log"); ax[0].set_xlabel("evaluation"); ax[0].set_ylabel("cost"); ax[0].legend()
+    ax[0].set_title(f"{opt}: {len(c)} RCWA cells")
+    names = r["variables"]
+    if len(names) >= 2:
+        X = np.array([h[0] for h in r["history"]])
+        sc = ax[1].scatter(X[:, 0], X[:, 1], c=np.log10(np.maximum(c, 1e-6)), cmap="viridis_r", s=18)
+        ax[1].plot(*[r["best"][n] for n in names[:2]], "r*", ms=14)
+        ax[1].set_xlabel(names[0]); ax[1].set_ylabel(names[1]); plt.colorbar(sc, ax=ax[1], label="log10 cost")
+    else:
+        X = np.array([h[0][0] for h in r["history"]]); ax[1].plot(X, c, ".")
+        ax[1].set_xlabel(names[0]); ax[1].set_ylabel("cost"); ax[1].set_yscale("log")
+    figpath = _out(slug + ".png"); fig.tight_layout(); fig.savefig(figpath, dpi=120); plt.close(fig)
+    o = r["outputs"]; pf = r["power_factor"]
+    rows = "\n".join(f"| {k} | {abs(v):.4f} | {np.degrees(np.angle(v)):+.1f} | {abs(v) ** 2 * pf:.4f} |" for k, v in o.items())
+    ret = np.degrees(np.angle(o["txx"] / o["tyy"]))
+    body = (f"- **Cell:** {shape}, {mat} on n_sub = {n_sub:.4f}, L = {L*1000:.0f} nm, H = {H*1000:.0f} nm, "
+            f"{lam0*1000:.0f} nm, M = {r['cell']['M']}\n"
+            f"- **Optimizer:** {opt}, {r['n_evals']} evaluations, seed {r['seed']}\n"
+            f"- **Best:** " + ", ".join(f"{k} = {v:.4f}" for k, v in r["best"].items()) + f" · **cost {r['cost']:.4g}**\n"
+            f"- **Targets:** " + "; ".join(r["targets"]) + "\n"
+            f"- **Retardance** arg(txx/tyy) = {ret:+.1f}°\n\n"
+            "| Jones element | abs | phase (deg) | power |\n|---|---|---|---|\n" + rows + "\n\n"
+            "- Bounds are hard: a best value on a bound means the target may need a wider range "
+            "(check the DRC limits before widening). Phase costs are normalized to 0..1 (wrapped |d phase| / pi).")
+    return figpath, body, f"{opt}: cost {r['cost']:.3g} after {r['n_evals']} cells, retardance {ret:+.0f} deg"
+
+
 RUNNERS = {"grating": run_grating, "metalens_library": run_metalens_library,
            "angle_sweep": run_angle_sweep,
            "grating2d": run_grating2d, "metalens_pillar_2d": run_metalens_pillar_2d,
@@ -1275,7 +1342,7 @@ RUNNERS = {"grating": run_grating, "metalens_library": run_metalens_library,
            "fov_analysis": run_fov_analysis, "index_robustness": run_index_robustness,
            "metalens_large_tiled": run_metalens_large_tiled,
            "achromatic_design": run_achromatic_design,
-           "recipe": run_recipe}
+           "recipe": run_recipe, "cell_optimize": run_cell_optimize}
 
 
 # ----------------------------- report + update -----------------------------

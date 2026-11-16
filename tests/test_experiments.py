@@ -34,6 +34,7 @@ FAST = {
     "metalens_large_tiled": {"D_lens": 15.0, "f": 20.0, "M": 4, "tile_cells": 30},
     "achromatic_design": {"D_lens": 4.0, "f": 8.0, "band": 0.06, "n_size": 3, "n_h": 2, "M": 4},
     "recipe": {"D_lens": 4.0, "f": 6.0, "n_trial": 2},
+    "cell_optimize": {"M": 4, "N": 128, "max_evals": 8, "optimizer": "differential_evolution"},
 }
 
 
@@ -187,3 +188,9 @@ def test_project_dir_vault_names(tmp_path, monkeypatch):
     monkeypatch.setenv("RCWA_PROJECT_DIR", str(tmp_path))
     root, dn, rp, sim = R.project_dirs()
     assert (dn, rp, sim) == tuple(str(tmp_path / n) for n in ("Deneyler", "Raporlar", "Simulasyonlar"))
+
+
+def test_cell_optimize_note_parsing():
+    t = R._parse_targets("txx/tyy phase 180 2; txx power 1")
+    assert t[0].value == __import__("pytest").approx(3.141592653589793) and t[0].weight == 2 and t[1].representation == "power"
+    assert R._parse_vars("p0=0.06:0.3, angle=0:1.57") == {"p0": (0.06, 0.3), "angle": (0.0, 1.57)}

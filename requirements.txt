@@ -10,6 +10,7 @@ grcwa            # validation + adjoint(E1) + metallic-2D(E3) + non-orthogonal l
 autograd         # adjoint/autodiff gradients (E1)
 gdstk            # GDS generation
 pyyaml           # refractiveindex.info YAML material import (E7)
+scikit-learn     # Bayesian meta-cell optimizer (Gaussian process)
 
 # --- OPTIONAL (when needed) ---
 # tidy3d         # 3D FDTD cloud validation (E5/E6) — free academic credits

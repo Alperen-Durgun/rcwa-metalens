@@ -48,7 +48,10 @@ jobs:
       - name: Angle-dependent library tests (analytic thin film, grcwa cross-check)
         run: pytest tests/test_angular.py
 
-      - name: End-to-end tests (all 25 generators, CLI, note workflow)
+      - name: Meta-cell optimizer tests (eight optimizers, Jones targets, sweep cross-check)
+        run: pytest tests/test_cellopt.py
+
+      - name: End-to-end tests (all 27 generators, CLI, note workflow)
         run: pytest tests/test_experiments.py
 
       - name: Benchmark suite (values must match benchmarks/baseline.json; times are reported only)
